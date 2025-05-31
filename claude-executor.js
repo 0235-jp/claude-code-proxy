@@ -31,12 +31,18 @@ function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = 
 }
 
 async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
-  let workspacePath
 
+  
   if (claudeSessionId) {
     const session = getSession(claudeSessionId)
     if (!session) {
-      reply.raw.write(`data: ${JSON.stringify({type: "error", error: "Session not found"})}\n\n`)
+      reply.raw.write(`data: ${JSON.stringify({
+        type: "result",
+        subtype: "error",
+        is_error: true,
+        result: "Session not found",
+        session_id: claudeSessionId || null
+      })}\n\n`)
       reply.raw.end()
       return
     }
@@ -63,7 +69,13 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
   const totalTimeout = setTimeout(() => {
     console.log('Claude process total timeout - killing process')
     claudeProcess.kill('SIGTERM')
-    reply.raw.write(`data: ${JSON.stringify({type: "error", error: `Total timeout (${timeoutMs/60000} minutes)`})}\n\n`)
+    reply.raw.write(`data: ${JSON.stringify({
+      type: "result",
+      subtype: "timeout",
+      is_error: true,
+      result: `Total timeout (${timeoutMs/60000} minutes)`,
+      session_id: claudeSessionId || null
+    })}\n\n`)
     reply.raw.end()
   }, timeoutMs)
 
@@ -74,7 +86,13 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
     inactivityTimeout = setTimeout(() => {
       console.log('Claude process inactivity timeout - killing process')
       claudeProcess.kill('SIGTERM')
-      reply.raw.write(`data: ${JSON.stringify({type: "error", error: "Inactivity timeout (5 minutes since last output)"})}\n\n`)
+      reply.raw.write(`data: ${JSON.stringify({
+        type: "result",
+        subtype: "timeout",
+        is_error: true,
+        result: "Inactivity timeout (5 minutes since last output)",
+        session_id: claudeSessionId || null
+      })}\n\n`)
       reply.raw.end()
     }, 300000) // 5 minutes
   }
@@ -122,7 +140,13 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
     console.error('Claude process error:', error)
     clearTimeout(totalTimeout)
     if (inactivityTimeout) clearTimeout(inactivityTimeout)
-    reply.raw.write(`data: ${JSON.stringify({type: "error", error: error.message})}\n\n`)
+    reply.raw.write(`data: ${JSON.stringify({
+      type: "result",
+      subtype: "error",
+      is_error: true,
+      result: error.message,
+      session_id: claudeSessionId || null
+    })}\n\n`)
     reply.raw.end()
   })
 }
