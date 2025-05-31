@@ -228,8 +228,12 @@ prompt=Create and run a Python script
 ## Development
 
 ### Scripts
-- `npm start` - Start production server
+- `npm start` - Start production server (foreground)
 - `npm run dev` - Start development server with file watching
+- `npm run start:bg` - Start server in background
+- `npm run stop` - Stop background server
+- `npm run status` - Check server status
+- `npm run logs` - View server logs
 
 ### Environment
 The server runs on `0.0.0.0:3000` and is configured for both local and networked access.
