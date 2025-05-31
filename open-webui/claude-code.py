@@ -46,28 +46,50 @@ class Pipe:
         user_message = messages[-1].get("content", "")
 
         session_id = None
+        # Extract previous settings from conversation history
+        prev_dangerously_skip_permissions = None
+        prev_allowedTools = None
+        prev_disallowedTools = None
+        
         for i in range(len(messages) - 2, -1, -1):
             if messages[i].get("role") == "assistant":
                 assistant_content = messages[i].get("content", "")
                 session_match = re.search(r'session_id=([a-f0-9-]+)', assistant_content)
                 if session_match:
                     session_id = session_match.group(1)
+                
+                # Extract previous settings
+                prev_danger_match = re.search(r'dangerously-skip-permissions=(\w+)', assistant_content)
+                if prev_danger_match:
+                    prev_dangerously_skip_permissions = prev_danger_match.group(1).lower() == 'true'
+                
+                prev_allowed_match = re.search(r'allowedTools=\[([^\]]+)\]', assistant_content)
+                if prev_allowed_match:
+                    prev_allowedTools = [tool.strip().strip('"\'') for tool in prev_allowed_match.group(1).split(',')]
+                
+                prev_disallowed_match = re.search(r'disallowedTools=\[([^\]]+)\]', assistant_content)
+                if prev_disallowed_match:
+                    prev_disallowedTools = [tool.strip().strip('"\'') for tool in prev_disallowed_match.group(1).split(',')]
                 break
 
-        dangerously_skip_permissions = None
+        # Parse current message settings, fall back to previous if not specified
         danger_match = re.search(r'dangerously-skip-permissions=(\w+)', user_message)
         if danger_match:
             dangerously_skip_permissions = danger_match.group(1).lower() == 'true'
+        else:
+            dangerously_skip_permissions = prev_dangerously_skip_permissions
 
-        allowedTools = None
         allowed_match = re.search(r'allowedTools=\[([^\]]+)\]', user_message)
         if allowed_match:
             allowedTools = [tool.strip().strip('"\'') for tool in allowed_match.group(1).split(',')]
+        else:
+            allowedTools = prev_allowedTools
 
-        disallowedTools = None
         disallowed_match = re.search(r'disallowedTools=\[([^\]]+)\]', user_message)
         if disallowed_match:
             disallowedTools = [tool.strip().strip('"\'') for tool in disallowed_match.group(1).split(',')]
+        else:
+            disallowedTools = prev_disallowedTools
 
         prompt_match = re.search(r'prompt="([^"]+)"', user_message)
         if prompt_match:
@@ -113,6 +135,14 @@ class Pipe:
                                 session_id_from_system = json_data.get("session_id")
                                 if session_id_from_system:
                                     yield f"session_id={session_id_from_system}\n"
+                                    if dangerously_skip_permissions is not None:
+                                        yield f"dangerously-skip-permissions={str(dangerously_skip_permissions).lower()}\n"
+                                    if allowedTools:
+                                        tools_str = ",".join([f'"{tool}"' for tool in allowedTools])
+                                        yield f"allowedTools=[{tools_str}]\n"
+                                    if disallowedTools:
+                                        tools_str = ",".join([f'"{tool}"' for tool in disallowedTools])
+                                        yield f"disallowedTools=[{tools_str}]\n"
                                     yield "<thinking>\n"
 
                             elif json_data.get("type") == "assistant":
