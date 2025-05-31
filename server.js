@@ -22,6 +22,15 @@ async function startServer() {
     const { prompt, session_id, allowedTools, disallowedTools } = request.body
     const dangerouslySkipPermissions = request.body['dangerously-skip-permissions']
 
+    // Log incoming request details
+    console.log('=== Claude API Request ===')
+    console.log('Prompt:', prompt)
+    console.log('Session ID:', session_id || 'new session')
+    console.log('Dangerously skip permissions:', dangerouslySkipPermissions || false)
+    console.log('Allowed tools:', allowedTools || 'none specified')
+    console.log('Disallowed tools:', disallowedTools || 'none specified')
+    console.log('==========================')
+
     reply.type('text/event-stream')
       .header('Cache-Control', 'no-cache')
       .header('Connection', 'keep-alive')
