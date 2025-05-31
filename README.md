@@ -16,7 +16,7 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI, pro
 ## Project Structure
 
 ```
-/home/kohei/workspace/claude-code-server/
+claude-code-server/
 ├── package.json
 ├── server.js              # Fastify server
 ├── database.js           # SQLite management
@@ -104,7 +104,7 @@ claude -p --verbose --dangerously-skip-permissions --allowedTools "Bash,Edit" --
 ### Prerequisites
 - Node.js
 - Claude Code CLI installed and configured
-- Claude Code CLI available at `/home/kohei/.npm-global/bin/claude`
+- Claude Code CLI available at `claude`
 
 ### Setup
 ```bash
