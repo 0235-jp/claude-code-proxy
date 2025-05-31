@@ -109,6 +109,12 @@ claude -p --verbose --dangerously-skip-permissions --allowedTools "Bash,Edit" --
 ### Setup
 ```bash
 npm install
+
+# IMPORTANT: If you plan to use dangerously-skip-permissions option,
+# you must accept it in an interactive session first
+claude --dangerously-skip-permissions "test"
+# You will be prompted to accept the permission bypass. Type 'y' to accept.
+
 npm start
 ```
 
@@ -147,6 +153,44 @@ curl -X POST http://localhost:3000/api/claude \
   }' \
   -N
 ```
+
+### Important Notes
+
+#### Permission Bypass Setup
+Before using `dangerously-skip-permissions: true`, you must accept the permission bypass in an interactive Claude Code session:
+
+```bash
+claude --dangerously-skip-permissions "test"
+```
+
+When prompted, type `y` to accept. This is a one-time setup required by Claude Code CLI for security purposes.
+
+Without this initial acceptance, the server will return an error:
+```
+--dangerously-skip-permissions must be accepted in an interactive session first.
+```
+
+#### Open WebUI Integration
+The server includes a pipe implementation for Open WebUI (`open-webui/claude-code.py`). 
+
+**Usage in Open WebUI:**
+```
+# Basic usage
+Hello Claude Code!
+
+# With parameters
+dangerously-skip-permissions=true
+prompt=Create a hello world JavaScript file
+
+# With tool restrictions
+allowedTools=["Bash","Edit","Write"]
+prompt=Create and run a Python script
+```
+
+**Session Management:**
+- Session IDs are automatically extracted from previous assistant responses
+- Sessions persist across conversations in the same chat
+- Session information is displayed as `session_id=xxx` at the end of responses
 
 ## Architecture
 
