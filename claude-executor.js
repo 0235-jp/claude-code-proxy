@@ -21,7 +21,6 @@ function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = 
     args.push('--disallowedTools', options.disallowedTools.join(','))
   }
 
-  args.push(prompt)
 
   return spawn('claude', args, {
     cwd: workspacePath,
@@ -62,6 +61,7 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
 
   claudeProcess.on('spawn', () => {
     console.log('Claude process spawned successfully')
+    claudeProcess.stdin.write(prompt)
     claudeProcess.stdin.end()
   })
 
