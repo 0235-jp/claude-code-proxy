@@ -23,7 +23,7 @@ function executeClaudeCommand(query, claudeSessionId, workspacePath, options = {
 
   args.push(query)
 
-  return spawn('/home/kohei/.npm-global/bin/claude', args, {
+  return spawn('claude', args, {
     cwd: workspacePath,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env }
