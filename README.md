@@ -178,19 +178,34 @@ The server includes a pipe implementation for Open WebUI (`open-webui/claude-cod
 # Basic usage
 Hello Claude Code!
 
-# With parameters
+# With parameters (first time)
 dangerously-skip-permissions=true
+allowedTools=["Bash","Edit","Write"]
 prompt=Create a hello world JavaScript file
 
-# With tool restrictions
-allowedTools=["Bash","Edit","Write"]
-prompt=Create and run a Python script
+# Subsequent messages (settings auto-inherited)
+Can you add error handling?
+
+# Change settings mid-conversation
+allowedTools=["Read","WebSearch"]
+Research best practices for Node.js
 ```
+
+**Settings Inheritance (NEW):**
+- **Auto-Inheritance**: Settings persist throughout the conversation
+- **One-Time Setup**: Specify permissions once, reused automatically
+- **Mid-Conversation Changes**: Override settings anytime by specifying new ones
+- **Conversation Scoped**: Settings reset when starting a new conversation
 
 **Session Management:**
 - Session IDs are automatically extracted from previous assistant responses
 - Sessions persist across conversations in the same chat
-- Session information is displayed as `session_id=xxx` at the end of responses
+- Session and settings information displayed at start of each response:
+  ```
+  session_id=abc123-def456
+  dangerously-skip-permissions=true
+  allowedTools=["Bash","Edit","Write"]
+  ```
 
 ## Architecture
 
@@ -213,9 +228,11 @@ prompt=Create and run a Python script
 ### Key Features
 
 - **Session Persistence**: Claude Code session_ids are mapped to persistent workspaces
+- **Settings Inheritance**: Permissions auto-inherit within conversations (Open WebUI)
 - **Workspace Isolation**: Each session has its own workspace directory with server-generated UUID
 - **Streaming Response**: Direct streaming of Claude Code output to clients
 - **Permission Control**: API access to Claude Code permission flags
+- **UI Optimization**: Content truncation prevents browser blocking on large outputs
 - **CORS Support**: Cross-origin requests enabled
 
 ### Database Management

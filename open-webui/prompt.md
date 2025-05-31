@@ -10,9 +10,9 @@ This prompt template provides a convenient way to interact with Claude Code Serv
 
 **Content:**
 ```
-dangerously-skip-permissions=
-allowedTools=
-disallowedTools=
+dangerously-skip-permissions=true
+allowedTools=["Task","Bash","Glob","Grep","LS","Read","Edit","MultiEdit","Write","NotebookRead","NotebookEdit","WebFetch","TodoRead","TodoWrite","WebSearch"]
+disallowedTools=["Task","Bash","Glob","Grep","LS","Read","Edit","MultiEdit","Write","NotebookRead","NotebookEdit","WebFetch","TodoRead","TodoWrite","WebSearch"]
 prompt=
 ```
 
@@ -98,16 +98,54 @@ Create a Python script that prints hello world
 - **Session ID Display:** Session information appears as `session_id=xxx` in responses
 - **No Manual Session Management:** Users don't need to manually specify session IDs
 
+## Settings Inheritance (NEW)
+
+Settings are automatically inherited within the same conversation! You only need to specify them once.
+
+### How It Works
+- **First Message:** Specify your desired settings once
+- **Subsequent Messages:** Settings are automatically reused from previous messages
+- **Override:** Specify new settings anytime to change them mid-conversation
+- **Reset:** Settings reset when starting a new conversation
+
+### Example Workflow
+```
+# First message - set permissions once
+dangerously-skip-permissions=true
+allowedTools=["Bash","Edit","Write","Read"]
+prompt="Help me create a Node.js project"
+
+# Second message - settings automatically inherited
+Can you add error handling to the main file?
+
+# Third message - still using same settings
+Now create a test file
+
+# Fourth message - change settings if needed
+allowedTools=["Read","WebSearch"]
+Research the latest best practices for Node.js
+```
+
 ## Response Format
 
 Responses are formatted as:
 ```
 session_id=abc123-def456-...
+dangerously-skip-permissions=true
+allowedTools=["Bash","Edit","Write","Read"]
 
-A:Claude Code response text here
+<thinking>
+Claude's thinking process and tool usage...
+</thinking>
 
-result:Final result summary
+Final response text here
 ```
+
+The session information now includes:
+- **session_id:** Unique identifier for the session
+- **Current settings:** All active permissions and tool restrictions (displayed on separate lines)
+- **Thinking process:** Claude's reasoning and tool usage (truncated if very long)
+- **Final response:** The complete answer to your request
 ## Tips
 
 - **Parameter Order:** Parameters can be specified in any order
@@ -115,3 +153,6 @@ result:Final result summary
 - **Case Sensitivity:** Parameter names are case-sensitive
 - **Tool Names:** Tool names in arrays are case-sensitive and should match exactly
 - **Error Handling:** Invalid parameters are ignored, and the system falls back to defaults
+- **Settings Inheritance:** Once set, permissions persist for the entire conversation - no need to re-enter them
+- **Efficient Workflow:** Set your preferred tools once at the start, then focus on your actual requests
+- **Mid-conversation Changes:** Override settings anytime by specifying new ones in your message
