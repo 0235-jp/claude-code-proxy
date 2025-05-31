@@ -1,0 +1,37 @@
+name: Auto Approve
+on:
+  pull_request:
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Check if PR author is admin
+        id: check-admin
+        run: |
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          REPO="${{ github.repository }}"
+          PERMISSION=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$REPO/collaborators/$PR_AUTHOR/permission" \
+            | jq -r '.permission')
+          
+          if [ "$PERMISSION" == "admin" ]; then
+            echo "is_admin=true" >> $GITHUB_OUTPUT
+            echo "PR author $PR_AUTHOR is an admin"
+          else
+            echo "is_admin=false" >> $GITHUB_OUTPUT
+            echo "PR author $PR_AUTHOR is not an admin (permission: $PERMISSION)"
+          fi
+      - name: Approve Pull Request
+        if: steps.check-admin.outputs.is_admin == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'APPROVE'
+            })
