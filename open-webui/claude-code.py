@@ -4,7 +4,7 @@ author: 0235 inc
 author_url: https://github.com/0235-jp
 funding_url: https://github.com/0235-jp
 repo_url: https://github.com/0235-jp/Claude-Code-Server
-version: 0.1
+version: 0.2
 
 REQUIREMENTS:
 This pipe requires Claude Code Server to be running.
