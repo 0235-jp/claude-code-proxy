@@ -89,6 +89,7 @@ class Pipe:
 
         headers = {"Content-Type": "application/json"}
         
+        
         response = requests.post(
             f"{self.valves.BASE_URL}/api/claude",
             headers=headers,
@@ -106,19 +107,22 @@ class Pipe:
                             if json_data.get("type") == "system" and json_data.get("subtype") == "init":
                                 session_id_from_system = json_data.get("session_id")
                                 if session_id_from_system:
-                                    yield f"session_id={session_id_from_system}\n\n"
+                                    yield f"session_id={session_id_from_system}\n"
+                                    yield "<thinking>\n"
 
                             elif json_data.get("type") == "assistant":
                                 message = json_data.get("message", {})
                                 content = message.get("content", [])
                                 for item in content:
                                     if item.get("type") == "text":
-                                        yield f"\nassistant:{item.get('text', '')}"
+                                        yield f"\n{item.get('text', '')}"
 
                             elif json_data.get("type") == "result":
+                                yield "\n</thinking>\n"
+                                
                                 result_text = json_data.get("result", "")
                                 if result_text:
-                                    yield f"\nresult:{result_text}"
+                                    yield f"{result_text}"
 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse JSON: {line} - Error: {e}")
