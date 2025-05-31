@@ -46,7 +46,7 @@ CREATE TABLE sessions (
 **Request Body:**
 ```json
 {
-  "query": "hello",
+  "prompt": "hello",
   "session_id": "9c88687a-61ce-4315-afd5-58b7d84ee68b",  // Optional (for new sessions)
   "dangerously-skip-permissions": true,                   // Optional
   "allowedTools": ["Bash", "Edit"],                      // Optional
@@ -58,9 +58,9 @@ CREATE TABLE sessions (
 ```json
 {
   "type": "object",
-  "required": ["query"],
+  "required": ["prompt"],
   "properties": {
-    "query": { "type": "string" },
+    "prompt": { "type": "string" },
     "session_id": { "type": "string" },
     "dangerously-skip-permissions": { "type": "boolean" },
     "allowedTools": { "type": "array", "items": { "type": "string" } },
@@ -86,17 +86,17 @@ data: {"type":"result","subtype":"success","cost_usd":0.00338106,"is_error":fals
 
 ### New Session
 ```bash
-claude -p --verbose --output-format stream-json "query"
+claude -p --verbose --output-format stream-json "prompt"
 ```
 
 ### Resume Session
 ```bash
-claude -p --verbose --resume <claude-session-id> --output-format stream-json "query"
+claude -p --verbose --resume <claude-session-id> --output-format stream-json "prompt"
 ```
 
 ### With Permission Options
 ```bash
-claude -p --verbose --dangerously-skip-permissions --allowedTools "Bash,Edit" --disallowedTools "WebFetch" --output-format stream-json "query"
+claude -p --verbose --dangerously-skip-permissions --allowedTools "Bash,Edit" --disallowedTools "WebFetch" --output-format stream-json "prompt"
 ```
 
 ## Installation & Usage
@@ -120,7 +120,7 @@ The server starts on port 3000 and provides the `/api/claude` endpoint for Claud
 ```bash
 curl -X POST http://localhost:3000/api/claude \
   -H "Content-Type: application/json" \
-  -d '{"query": "Hello, Claude Code!"}' \
+  -d '{"prompt": "Hello, Claude Code!"}' \
   -N
 ```
 
@@ -129,7 +129,7 @@ curl -X POST http://localhost:3000/api/claude \
 curl -X POST http://localhost:3000/api/claude \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "Continue from where we left off",
+    "prompt": "Continue from where we left off",
     "session_id": "9c88687a-61ce-4315-afd5-58b7d84ee68b"
   }' \
   -N
@@ -140,7 +140,7 @@ curl -X POST http://localhost:3000/api/claude \
 curl -X POST http://localhost:3000/api/claude \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "Create a new file",
+    "prompt": "Create a new file",
     "dangerously-skip-permissions": true,
     "allowedTools": ["Bash", "Edit", "Write"],
     "disallowedTools": ["WebFetch", "WebSearch"]
@@ -154,7 +154,7 @@ curl -X POST http://localhost:3000/api/claude \
 
 #### New Session
 1. Server creates workspace directory (`session-{uuid}/`)
-2. Execute `claude -p --verbose --output-format stream-json "query"`
+2. Execute `claude -p --verbose --output-format stream-json "prompt"`
 3. Extract Claude Code session_id from system init message
 4. Save Claude Code session_id and workspace path to database
 5. Stream all JSON messages directly to client
@@ -162,7 +162,7 @@ curl -X POST http://localhost:3000/api/claude \
 #### Session Resume
 1. Validate Claude Code session_id in database
 2. Retrieve workspace path from database
-3. Execute `claude -p --verbose --resume <claude-session-id> --output-format stream-json "query"`
+3. Execute `claude -p --verbose --resume <claude-session-id> --output-format stream-json "prompt"`
 4. Update database with new session_id (Claude Code generates new ID on resume)
 5. Stream all JSON messages directly to client
 

@@ -8,9 +8,9 @@ async function startServer() {
     schema: {
       body: {
         type: 'object',
-        required: ['query'],
+        required: ['prompt'],
         properties: {
-          query: { type: 'string' },
+          prompt: { type: 'string' },
           session_id: { type: 'string' },
           'dangerously-skip-permissions': { type: 'boolean' },
           allowedTools: { type: 'array', items: { type: 'string' } },
@@ -19,7 +19,7 @@ async function startServer() {
       }
     }
   }, async (request, reply) => {
-    const { query, session_id, allowedTools, disallowedTools } = request.body
+    const { prompt, session_id, allowedTools, disallowedTools } = request.body
     const dangerouslySkipPermissions = request.body['dangerously-skip-permissions']
 
     reply.type('text/event-stream')
@@ -29,7 +29,7 @@ async function startServer() {
 
     reply.hijack()
     
-    await executeClaudeAndStream(query, session_id, { dangerouslySkipPermissions, allowedTools, disallowedTools }, reply)
+    await executeClaudeAndStream(prompt, session_id, { dangerouslySkipPermissions, allowedTools, disallowedTools }, reply)
   })
 
   try {

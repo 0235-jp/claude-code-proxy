@@ -2,7 +2,7 @@ const { spawn } = require('child_process')
 const { saveSession, getSession } = require('./database')
 const { createWorkspace } = require('./session-manager')
 
-function executeClaudeCommand(query, claudeSessionId, workspacePath, options = {}) {
+function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = {}) {
   const args = ['-p', '--verbose', '--output-format', 'stream-json']
 
   if (claudeSessionId) {
@@ -21,7 +21,7 @@ function executeClaudeCommand(query, claudeSessionId, workspacePath, options = {
     args.push('--disallowedTools', options.disallowedTools.join(','))
   }
 
-  args.push(query)
+  args.push(prompt)
 
   return spawn('claude', args, {
     cwd: workspacePath,
@@ -30,7 +30,7 @@ function executeClaudeCommand(query, claudeSessionId, workspacePath, options = {
   })
 }
 
-async function executeClaudeAndStream(query, claudeSessionId, options, reply) {
+async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
   let workspacePath
 
   if (claudeSessionId) {
@@ -48,7 +48,7 @@ async function executeClaudeAndStream(query, claudeSessionId, options, reply) {
   console.log(`Executing Claude in workspace: ${workspacePath}`)
   console.log(`Options:`, options)
 
-  const claudeProcess = executeClaudeCommand(query, claudeSessionId, workspacePath, options)
+  const claudeProcess = executeClaudeCommand(prompt, claudeSessionId, workspacePath, options)
 
   claudeProcess.on('spawn', () => {
     console.log('Claude process spawned successfully')
