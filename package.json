@@ -1,0 +1,15 @@
+{
+  "name": "claude-code-chat-server",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "fastify": "^4.x",
+    "@fastify/cors": "^9.x",
+    "better-sqlite3": "^9.x",
+    "uuid": "^9.x"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  }
+}
