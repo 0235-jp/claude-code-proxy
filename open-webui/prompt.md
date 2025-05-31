@@ -10,9 +10,9 @@ This prompt template provides a convenient way to interact with Claude Code Serv
 
 **Content:**
 ```
-dangerously-skip-permissions=
-allowedTools=
-disallowedTools=
+dangerously-skip-permissions=true
+allowedTools=["Task","Bash","Glob","Grep","LS","Read","Edit","MultiEdit","Write","NotebookRead","NotebookEdit","WebFetch","TodoRead","TodoWrite","WebSearch"]
+disallowedTools=["Task","Bash","Glob","Grep","LS","Read","Edit","MultiEdit","Write","NotebookRead","NotebookEdit","WebFetch","TodoRead","TodoWrite","WebSearch"]
 prompt=
 ```
 

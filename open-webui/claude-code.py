@@ -73,7 +73,7 @@ class Pipe:
         if prompt_match:
             prompt = prompt_match.group(1)
         else:
-            prompt = re.sub(r'(dangerously-skip-permissions=\w+|allowedTools=\[[^\]]+\]|disallowedTools=\[[^\]]+\]|prompt="[^"]+")(\s*)', '', user_message).strip()
+            prompt = re.sub(r'(dangerously-skip-permissions=\w+|allowedTools=\[[^\]]+\]|disallowedTools=\[[^\]]+\]|prompt="[^"]+"|prompt=)(\s*)', '', user_message).strip()
             if not prompt:
                 prompt = user_message
 
@@ -98,12 +98,17 @@ class Pipe:
         )
 
         if response.status_code == 200:
+            buffer = ""
             for line in response.iter_lines():
                 if line:
                     try:
                         line_text = line.decode("utf-8")
                         if line_text.startswith("data: "):
-                            json_data = json.loads(line_text.replace("data: ", ""))
+                            json_str = line_text.replace("data: ", "")
+                            buffer += json_str
+                            json_data = json.loads(buffer)
+                            buffer = ""  # Reset buffer on successful parse
+                                
                             if json_data.get("type") == "system" and json_data.get("subtype") == "init":
                                 session_id_from_system = json_data.get("session_id")
                                 if session_id_from_system:
@@ -113,19 +118,89 @@ class Pipe:
                             elif json_data.get("type") == "assistant":
                                 message = json_data.get("message", {})
                                 content = message.get("content", [])
+                                stop_reason = message.get("stop_reason")
+                                is_final_response = stop_reason == "end_turn"
+                                
+                                # Close thinking before final response
+                                if is_final_response:
+                                    yield "\n</thinking>\n"
+                                
                                 for item in content:
                                     if item.get("type") == "text":
-                                        yield f"\n{item.get('text', '')}"
+                                        text_content = item.get('text', '')
+                                        if is_final_response:
+                                            # Final response outside thinking
+                                            yield f"\n{text_content}"
+                                        else:
+                                            # Thinking content with robot emoji - truncate if too long
+                                            if len(text_content) > 500:
+                                                truncated_content = text_content[:500] + "...(truncated)"
+                                                yield f"\n🤖< {truncated_content}"
+                                            else:
+                                                yield f"\n🤖< {text_content}"
+                                    elif item.get("type") == "tool_use":
+                                        tool_name = item.get("name", "Unknown")
+                                        tool_input = item.get("input", {})
+                                        tool_input_str = str(tool_input)
+                                        if len(tool_input_str) > 500:
+                                            truncated_input = tool_input_str[:500] + "...(truncated)"
+                                            yield f"\n🔧 Using {tool_name}: {truncated_input}\n"
+                                        else:
+                                            yield f"\n🔧 Using {tool_name}: {tool_input}\n"
+
+                            elif json_data.get("type") == "user":
+                                # Handle tool results
+                                message = json_data.get("message", {})
+                                content = message.get("content", [])
+                                for item in content:
+                                    if item.get("type") == "tool_result":
+                                        tool_content = item.get("content", "")
+                                        is_error = item.get("is_error", False)
+                                        if is_error:
+                                            yield f"\n❌ Tool Error: {tool_content}\n"
+                                        else:
+                                            # Truncate long tool results to prevent UI blocking
+                                            if len(tool_content) > 500:
+                                                truncated_content = tool_content[:500] + "...(truncated)"
+                                                yield f"\n✅ Tool Result: {truncated_content}\n"
+                                            else:
+                                                yield f"\n✅ Tool Result: {tool_content}\n"
 
                             elif json_data.get("type") == "result":
+                                # Skip result content since it's the same as final assistant message
+                                # Only show additional metadata if needed
+                                pass
+                            
+                            elif json_data.get("type") == "error":
                                 yield "\n</thinking>\n"
-                                
-                                result_text = json_data.get("result", "")
-                                if result_text:
-                                    yield f"{result_text}"
-
-                    except json.JSONDecodeError as e:
-                        print(f"Failed to parse JSON: {line} - Error: {e}")
+                                # Display error message directly
+                                error_message = json_data.get("error", "Unknown error")
+                                if len(str(error_message)) > 500:
+                                    truncated_error = str(error_message)[:500] + "...(truncated)"
+                                    yield f"\⚠️ {truncated_error}\n"
+                                else:
+                                    yield f"\⚠️ {error_message}\n"
+                            
+                            else:
+                                # Handle other unexpected data types (tool_use, etc.)
+                                # Pass through unknown data to maintain transparency
+                                json_str = str(json_data)
+                                if len(json_str) > 500:
+                                    truncated_json = json_str[:500] + "...(truncated)"
+                                    yield f"\n💩 {truncated_json}\n"
+                                else:
+                                    yield f"\n💩 {json_data}\n"
+                        else:
+                            line_text = line.decode("utf-8")
+                            if line_text.strip():
+                                if len(line_text) > 500:
+                                    truncated_line = line_text[:500] + "...(truncated)"
+                                    yield f"\n💩 {truncated_line}\n"
+                                else:
+                                    yield f"\n💩 {line_text}\n"
+                    except Exception as e:
+                        print(f"Error: {e}")
+                        yield f"\n⚠️ {e}\n"
                         continue
         else:
             error_message = (
