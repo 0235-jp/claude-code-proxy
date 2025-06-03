@@ -1,19 +1,36 @@
 {
   "name": "claude-code-chat-server",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "dist/server.js",
   "dependencies": {
-    "fastify": "^4.x",
     "@fastify/cors": "^9.x",
     "better-sqlite3": "^9.x",
+    "fastify": "^4.x",
     "uuid": "^9.x"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "start:bg": "nohup node server.js > server.log 2>&1 & echo $! > server.pid",
+    "build": "tsc",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts'",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "start:bg": "nohup node dist/server.js > server.log 2>&1 & echo $! > server.pid",
     "stop": "kill $(cat server.pid) && rm server.pid",
     "status": "ps -p $(cat server.pid) > /dev/null 2>&1 && echo 'Server is running (PID: '$(cat server.pid)')' || echo 'Server is not running'",
     "logs": "tail -f server.log"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.29",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.19.0",
+    "@typescript-eslint/parser": "^8.19.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
   }
 }

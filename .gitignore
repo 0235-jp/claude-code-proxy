@@ -13,3 +13,4 @@ yarn-error.log*
 .env.production.local
 *.log
 server.pid
+dist/

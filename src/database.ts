@@ -1,7 +1,14 @@
-const Database = require('better-sqlite3')
-const path = require('path')
+import Database from 'better-sqlite3'
+import path from 'path'
 
-const db = new Database(path.join(__dirname, 'sessions.db'))
+interface Session {
+  claude_session_id: string
+  workspace_path: string
+  created_at: string
+  last_used_at: string
+}
+
+const db = new Database(path.join(__dirname, '..', 'sessions.db'))
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
@@ -12,7 +19,7 @@ db.exec(`
   )
 `)
 
-function saveSession(claudeSessionId, workspacePath) {
+export function saveSession(claudeSessionId: string, workspacePath: string): void {
   const stmt = db.prepare(`
     INSERT OR REPLACE INTO sessions (claude_session_id, workspace_path, last_used_at)
     VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -20,9 +27,7 @@ function saveSession(claudeSessionId, workspacePath) {
   stmt.run(claudeSessionId, workspacePath)
 }
 
-function getSession(claudeSessionId) {
+export function getSession(claudeSessionId: string): Session | undefined {
   const stmt = db.prepare('SELECT * FROM sessions WHERE claude_session_id = ?')
-  return stmt.get(claudeSessionId)
+  return stmt.get(claudeSessionId) as Session | undefined
 }
-
-module.exports = { saveSession, getSession }
