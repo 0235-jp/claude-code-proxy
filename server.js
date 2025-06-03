@@ -243,30 +243,42 @@ async function startServer() {
             const stopReason = message.stop_reason
             const isFinalResponse = stopReason === 'end_turn'
             
-            if (isFinalResponse && inThinking) {
-              sendChunk('\n</thinking>\n')
-              inThinking = false
-            }
-            
             for (const item of content) {
               if (item.type === 'text') {
+                // Close thinking when text content arrives
+                if (inThinking) {
+                  sendChunk('\n</thinking>\n')
+                  inThinking = false
+                }
+                
                 const textContent = item.text || ''
-                if (isFinalResponse) {
-                  // For final response, send text in chunks
-                  const fullText = `\n${textContent}`
-                  const chunks = splitIntoChunks(fullText)
-                  for (let i = 0; i < chunks.length; i++) {
-                    sendChunk(chunks[i], i === chunks.length - 1 ? 'stop' : null)
-                  }
-                } else {
-                  // For thinking content, send with emoji prefix in chunks
-                  const fullText = `\n🤖< ${textContent}`
-                  const chunks = splitIntoChunks(fullText)
-                  for (const chunk of chunks) {
-                    sendChunk(chunk)
-                  }
+                const fullText = `\n${textContent}`
+                const chunks = splitIntoChunks(fullText)
+                for (let i = 0; i < chunks.length; i++) {
+                  sendChunk(chunks[i], i === chunks.length - 1 && isFinalResponse ? 'stop' : null)
+                }
+              } else if (item.type === 'thinking') {
+                // Reopen thinking if it was closed by text
+                if (!inThinking) {
+                  sendChunk('\n<thinking>\n')
+                  inThinking = true
+                }
+                
+                // Thinking content stays within thinking tags
+                const thinkingContent = item.thinking || ''
+                const fullText = `\n🤖< ${thinkingContent}`
+                const chunks = splitIntoChunks(fullText)
+                for (const chunk of chunks) {
+                  sendChunk(chunk)
                 }
               } else if (item.type === 'tool_use') {
+                // Reopen thinking if it was closed by text
+                if (!inThinking) {
+                  sendChunk('\n<thinking>\n')
+                  inThinking = true
+                }
+                
+                // Tool use stays within thinking tags
                 const toolName = item.name || 'Unknown'
                 const toolInput = JSON.stringify(item.input || {})
                 const fullText = `\n🔧 Using ${toolName}: ${toolInput}\n`
@@ -274,28 +286,17 @@ async function startServer() {
                 for (const chunk of chunks) {
                   sendChunk(chunk)
                 }
-              } else if (item.type === 'thinking') {
-                const thinkingContent = item.thinking || ''
-                if (isFinalResponse) {
-                  // For final response, send thinking content as normal text
-                  const fullText = `\n${thinkingContent}`
-                  const chunks = splitIntoChunks(fullText)
-                  for (let i = 0; i < chunks.length; i++) {
-                    sendChunk(chunks[i], i === chunks.length - 1 ? 'stop' : null)
-                  }
-                } else {
-                  // For thinking content during processing, send with emoji prefix
-                  const fullText = `\n🤖< ${thinkingContent}`
-                  const chunks = splitIntoChunks(fullText)
-                  for (const chunk of chunks) {
-                    sendChunk(chunk)
-                  }
-                }
               }
             }
             
-            // Send empty delta with finish_reason for final response (if not already sent)
-            if (isFinalResponse && content.every(item => item.type !== 'text' && item.type !== 'thinking')) {
+            // Close thinking if still open at end of final response
+            if (isFinalResponse && inThinking) {
+              sendChunk('\n</thinking>\n')
+              inThinking = false
+            }
+            
+            // Send empty delta with finish_reason for final response (if text didn't already send it)
+            if (isFinalResponse && content.every(item => item.type !== 'text')) {
               const finalChunk = {
                 id: messageId,
                 object: 'chat.completion.chunk',
