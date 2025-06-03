@@ -274,11 +274,28 @@ async function startServer() {
                 for (const chunk of chunks) {
                   sendChunk(chunk)
                 }
+              } else if (item.type === 'thinking') {
+                const thinkingContent = item.thinking || ''
+                if (isFinalResponse) {
+                  // For final response, send thinking content as normal text
+                  const fullText = `\n${thinkingContent}`
+                  const chunks = splitIntoChunks(fullText)
+                  for (let i = 0; i < chunks.length; i++) {
+                    sendChunk(chunks[i], i === chunks.length - 1 ? 'stop' : null)
+                  }
+                } else {
+                  // For thinking content during processing, send with emoji prefix
+                  const fullText = `\n🤖< ${thinkingContent}`
+                  const chunks = splitIntoChunks(fullText)
+                  for (const chunk of chunks) {
+                    sendChunk(chunk)
+                  }
+                }
               }
             }
             
             // Send empty delta with finish_reason for final response (if not already sent)
-            if (isFinalResponse && content.every(item => item.type !== 'text')) {
+            if (isFinalResponse && content.every(item => item.type !== 'text' && item.type !== 'thinking')) {
               const finalChunk = {
                 id: messageId,
                 object: 'chat.completion.chunk',
