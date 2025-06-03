@@ -154,7 +154,6 @@ async function startServer() {
     const originalWrite = reply.raw.write
     const originalEnd = reply.raw.end
     
-    let responseBuffer = ''
     let inThinking = false
     let sessionPrinted = false
     let messageId = 'chatcmpl-' + Date.now()
@@ -200,19 +199,21 @@ async function startServer() {
             const sessionId = jsonData.session_id
             if (sessionId && !sessionPrinted) {
               sessionPrinted = true
-              responseBuffer = `session_id=${sessionId}\n`
+              
+              // Build session info content
+              let sessionInfo = `session_id=${sessionId}\n`
               if (dangerouslySkipPermissions !== null) {
-                responseBuffer += `dangerously-skip-permissions=${dangerouslySkipPermissions}\n`
+                sessionInfo += `dangerously-skip-permissions=${dangerouslySkipPermissions}\n`
               }
               if (allowedTools) {
                 const toolsStr = allowedTools.map(tool => `"${tool}"`).join(',')
-                responseBuffer += `allowedTools=[${toolsStr}]\n`
+                sessionInfo += `allowedTools=[${toolsStr}]\n`
               }
               if (disallowedTools) {
                 const toolsStr = disallowedTools.map(tool => `"${tool}"`).join(',')
-                responseBuffer += `disallowedTools=[${toolsStr}]\n`
+                sessionInfo += `disallowedTools=[${toolsStr}]\n`
               }
-              responseBuffer += '<thinking>\n'
+              sessionInfo += '<thinking>\n'
               inThinking = true
               
               // Send initial chunk with role
@@ -231,8 +232,8 @@ async function startServer() {
               }
               originalWrite.call(reply.raw, `data: ${JSON.stringify(roleChunk)}\n\n`)
               
-              // Send session info in chunks
-              const chunks = splitIntoChunks(responseBuffer)
+              // Send session info in chunks (only once)
+              const chunks = splitIntoChunks(sessionInfo)
               for (const chunk of chunks) {
                 sendChunk(chunk)
               }
