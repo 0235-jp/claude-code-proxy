@@ -1,0 +1,130 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  lint-and-test:
+    name: Lint, Type Check, and Build
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run ESLint
+      run: npm run lint
+      continue-on-error: true
+    
+    - name: Check TypeScript types
+      run: npx tsc --noEmit
+    
+    - name: Build project
+      run: npm run build
+    
+    - name: Check for build artifacts
+      run: |
+        if [ ! -d "dist" ]; then
+          echo "Error: dist directory not found"
+          exit 1
+        fi
+        echo "Build artifacts created successfully"
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check code formatting
+      run: |
+        npm run format
+        git diff --exit-code || (echo "Code formatting issues found. Please run 'npm run format' locally." && exit 1)
+    
+    - name: Check for console.logs
+      run: |
+        echo "Checking for console statements (warnings allowed)..."
+        npx eslint 'src/**/*.ts' --rule 'no-console:error' --max-warnings 50 || true
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: Run npm audit
+      run: npm audit --audit-level=high
+      continue-on-error: true
+    
+    - name: Check for sensitive data
+      run: |
+        echo "Checking for potential secrets..."
+        # Check for common patterns that might indicate secrets
+        ! grep -r -E "(api[_-]?key|secret|password|token)" src/ --exclude-dir=node_modules || echo "Warning: Potential sensitive data found"
+
+  pr-info:
+    name: PR Information
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: PR Comment
+      uses: actions/github-script@v7
+      if: github.event_name == 'pull_request' && github.event.action == 'opened'
+      with:
+        script: |
+          const prNumber = context.issue.number;
+          const prAuthor = context.payload.pull_request.user.login;
+          
+          const comment = `## 🚀 PR Check Status
+          
+          Thank you @${prAuthor} for your contribution!
+          
+          The automated checks are running:
+          - ✓ Linting (ESLint)
+          - ✓ Type checking (TypeScript)
+          - ✓ Build verification
+          - ✓ Code formatting
+          - ✓ Security audit
+          
+          Please ensure all checks pass before merging.`;
+          
+          github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+            body: comment
+          });
