@@ -1,5 +1,7 @@
 const { spawn } = require('child_process')
 const { createWorkspace } = require('./session-manager')
+const { isMcpEnabled, validateMcpTools, getMcpConfig } = require('./mcp-manager')
+const path = require('path')
 
 function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = {}) {
   const args = ['-p', '--verbose', '--output-format', 'stream-json']
@@ -12,14 +14,31 @@ function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = 
     args.push('--dangerously-skip-permissions')
   }
 
+  // Collect all allowed tools (regular + MCP)
+  let allAllowedTools = []
   if (options.allowedTools && options.allowedTools.length > 0) {
-    args.push('--allowedTools', options.allowedTools.join(','))
+    allAllowedTools = [...options.allowedTools]
+  }
+  
+  // Add MCP configuration if enabled and tools are requested
+  if (isMcpEnabled() && options.mcpAllowedTools && options.mcpAllowedTools.length > 0) {
+    const validMcpTools = validateMcpTools(options.mcpAllowedTools)
+    if (validMcpTools.length > 0) {
+      const mcpConfigPath = path.join(__dirname, 'mcp-config.json')
+      args.push('--mcp-config', mcpConfigPath)
+      allAllowedTools = [...allAllowedTools, ...validMcpTools]
+      console.log('MCP enabled with tools:', validMcpTools)
+    }
+  }
+  
+  // Add combined allowed tools if any
+  if (allAllowedTools.length > 0) {
+    args.push('--allowedTools', allAllowedTools.join(','))
   }
 
   if (options.disallowedTools && options.disallowedTools.length > 0) {
     args.push('--disallowedTools', options.disallowedTools.join(','))
   }
-
 
   return spawn('claude', args, {
     cwd: workspacePath,
@@ -41,6 +60,18 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
 
   console.log(`Executing Claude in workspace: ${workspacePath}`)
   console.log(`Options:`, options)
+  
+  // Log MCP status
+  if (isMcpEnabled()) {
+    const mcpConfig = getMcpConfig()
+    const serverCount = Object.keys(mcpConfig.mcpServers || {}).length
+    console.log(`MCP enabled with ${serverCount} server(s) configured`)
+    if (options.mcpAllowedTools && options.mcpAllowedTools.length > 0) {
+      console.log(`MCP tools requested:`, options.mcpAllowedTools)
+    }
+  } else {
+    console.log('MCP not enabled (no mcp-config.json found)')
+  }
 
   const timeoutMs = options.timeout || 3600000
   console.log(`Total timeout set to: ${timeoutMs}ms (${timeoutMs/60000} minutes)`)
