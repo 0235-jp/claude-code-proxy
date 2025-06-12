@@ -1,10 +1,15 @@
 const fs = require('fs').promises
 const path = require('path')
-const { v4: uuidv4 } = require('uuid')
 
-async function createWorkspace() {
-  const sessionId = uuidv4()
-  const workspacePath = path.join(__dirname, 'Workspace', `session-${sessionId}`)
+async function createWorkspace(workspaceName = null) {
+  let workspacePath
+  
+  if (workspaceName) {
+    workspacePath = path.join(__dirname, 'workspace', workspaceName)
+  } else {
+    workspacePath = path.join(__dirname, 'shared_workspace')
+  }
+  
   await fs.mkdir(workspacePath, { recursive: true })
   return workspacePath
 }

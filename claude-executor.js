@@ -1,5 +1,4 @@
 const { spawn } = require('child_process')
-const { saveSession, getSession } = require('./database')
 const { createWorkspace } = require('./session-manager')
 
 function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = {}) {
@@ -30,22 +29,12 @@ function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = 
 }
 
 async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
-
+  let workspacePath
   
-  if (claudeSessionId) {
-    const session = getSession(claudeSessionId)
-    if (!session) {
-      reply.raw.write(`data: ${JSON.stringify({
-        type: "result",
-        subtype: "error",
-        is_error: true,
-        result: "Session not found",
-        session_id: claudeSessionId || null
-      })}\n\n`)
-      reply.raw.end()
-      return
-    }
-    workspacePath = session.workspace_path
+  if (options.workspace) {
+    workspacePath = await createWorkspace(options.workspace)
+  } else if (claudeSessionId) {
+    workspacePath = await createWorkspace()
   } else {
     workspacePath = await createWorkspace()
   }
@@ -53,8 +42,7 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
   console.log(`Executing Claude in workspace: ${workspacePath}`)
   console.log(`Options:`, options)
 
-  // Timeout settings: 1 hour total execution time
-  const timeoutMs = options.timeout || 3600000 // 1 hour default
+  const timeoutMs = options.timeout || 3600000
   console.log(`Total timeout set to: ${timeoutMs}ms (${timeoutMs/60000} minutes)`)
 
   const claudeProcess = executeClaudeCommand(prompt, claudeSessionId, workspacePath, options)
@@ -65,7 +53,6 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
     claudeProcess.stdin.end()
   })
 
-  // Total execution time timeout (1 hour)
   const totalTimeout = setTimeout(() => {
     console.log('Claude process total timeout - killing process')
     claudeProcess.kill('SIGTERM')
@@ -79,7 +66,6 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
     reply.raw.end()
   }, timeoutMs)
 
-  // Inactivity timeout (5 minutes since last output)
   let inactivityTimeout
   const resetInactivityTimeout = () => {
     if (inactivityTimeout) clearTimeout(inactivityTimeout)
@@ -94,13 +80,13 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
         session_id: claudeSessionId || null
       })}\n\n`)
       reply.raw.end()
-    }, 300000) // 5 minutes
+    }, 300000)
   }
   resetInactivityTimeout()
 
   claudeProcess.stdout.on('data', async (data) => {
     console.log('Claude stdout:', data.toString())
-    resetInactivityTimeout() // Reset inactivity timer since we got output
+    resetInactivityTimeout()
     
     const lines = data.toString().split('\n').filter(line => line.trim())
 
@@ -109,12 +95,7 @@ async function executeClaudeAndStream(prompt, claudeSessionId, options, reply) {
         const json = JSON.parse(line)
 
         if (json.type === 'system' && json.subtype === 'init' && json.session_id) {
-          if (claudeSessionId) {
-            console.log('Updating session after resume:', claudeSessionId, '->', json.session_id)
-          } else {
-            console.log('Saving new session:', json.session_id, workspacePath)
-          }
-          saveSession(json.session_id, workspacePath)
+          console.log('Session initialized:', json.session_id)
         }
 
         reply.raw.write(`data: ${line}\n\n`)
