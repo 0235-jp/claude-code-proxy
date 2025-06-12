@@ -1,256 +1,191 @@
 # Claude Code Server
 
-A streaming API server that provides HTTP access to Claude Code CLI functionality.
+A streaming API server that provides HTTP access to Claude Code CLI functionality with MCP support.
 
 ## Overview
 
-Claude Code Server is a Fastify-based server that wraps the Claude Code CLI, providing a RESTful streaming API for interacting with Claude Code sessions. It manages workspaces and session persistence using SQLite.
+Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.0.18+), providing RESTful streaming APIs for interacting with Claude Code sessions. It supports workspace management and Model Context Protocol (MCP) integration for external data sources.
+
+## Features
+
+- **Streaming API**: Real-time Claude Code responses via Server-Sent Events
+- **Workspace Management**: Isolated workspaces with custom naming or shared workspace
+- **MCP Support**: Integration with Model Context Protocol for external tools
+- **Session Management**: Resume conversations with Claude Code sessions
+- **OpenAI API Compatible**: Drop-in replacement for OpenAI chat completions
+- **Permission Control**: Fine-grained tool permission management
 
 ## Tech Stack
 
 - **Fastify** - Web framework
-- **better-sqlite3** - SQLite operations
-- **child_process** - Claude Code execution
-- **Node.js fs/path** - File operations
+- **Claude Code CLI** - v1.0.18+ with MCP support
+- **Node.js** - Runtime environment
+- **MCP (Model Context Protocol)** - External data source integration
 
 ## Project Structure
 
 ```
 claude-code-server/
 ├── package.json
-├── server.js              # Fastify server
-├── database.js           # SQLite management
-├── session-manager.js    # Session & workspace management
-├── claude-executor.js    # Claude Code execution
-├── sessions.db          # SQLite file
-└── Workspace/           # Working directories
-    ├── session-abc123/  # Server-generated UUID
-    └── session-def456/
+├── server.js              # Fastify server with dual API endpoints
+├── claude-executor.js     # Claude Code execution with MCP support
+├── session-manager.js     # Workspace management
+├── mcp-manager.js         # MCP configuration handling
+├── mcp-config.json        # MCP server configuration (gitignored)
+├── mcp-config.json.example # MCP configuration template
+├── shared_workspace/      # Default workspace (gitignored)
+└── workspace/             # Custom workspaces (gitignored)
+    ├── project-a/
+    └── project-b/
 ```
 
-## Database Schema
+## API Parameters
 
-```sql
-CREATE TABLE sessions (
-  claude_session_id TEXT PRIMARY KEY,
-  workspace_path TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
+### Available Parameters
 
-## API Specification
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `prompt` | string | The message/instruction for Claude | `"Create a Python script"` |
+| `session_id` | string | Resume existing Claude session | `"9c88687a-61ce-4315-afd5-58b7d84ee68b"` |
+| `workspace` | string | Custom workspace name (default: shared) | `"my-project"` |
+| `dangerously-skip-permissions` | boolean | Skip tool permission prompts | `true` |
+| `allowedTools` | string[] | Allowed Claude tools | `["Bash", "Edit", "Write"]` |
+| `disallowedTools` | string[] | Disallowed Claude tools | `["WebFetch", "WebSearch"]` |
+| `mcp_allowed_tools` | string[] | Allowed MCP tools | `["mcp__github__get_repo"]` |
+
+## API Endpoints
 
 ### POST /api/claude
 
 **Request Body:**
 ```json
 {
-  "prompt": "hello",
-  "session_id": "9c88687a-61ce-4315-afd5-58b7d84ee68b",  // Optional (for new sessions)
-  "dangerously-skip-permissions": true,                   // Optional
-  "allowedTools": ["Bash", "Edit"],                      // Optional
-  "disallowedTools": ["WebFetch"]                        // Optional
+  "prompt": "Create a Python script",
+  "session_id": "9c88687a-61ce-4315-afd5-58b7d84ee68b",
+  "workspace": "my-project",
+  "dangerously-skip-permissions": true,
+  "allowedTools": ["Bash", "Edit", "Write"],
+  "disallowedTools": ["WebFetch"],
+  "mcp_allowed_tools": ["mcp__github__get_repo"]
 }
 ```
 
-**Request Body Schema:**
+### POST /v1/chat/completions (OpenAI Compatible)
+
+**Standard Request Body:**
 ```json
 {
-  "type": "object",
-  "required": ["prompt"],
-  "properties": {
-    "prompt": { "type": "string" },
-    "session_id": { "type": "string" },
-    "dangerously-skip-permissions": { "type": "boolean" },
-    "allowedTools": { "type": "array", "items": { "type": "string" } },
-    "disallowedTools": { "type": "array", "items": { "type": "string" } }
-  }
+  "model": "claude-code",
+  "messages": [
+    {"role": "user", "content": "Create a Python web application"}
+  ],
+  "stream": true
 }
+```
+
+**To set parameters in the OpenAI API, use the following content:**
+
+The session_id is automatically read from the previous response.
+Other parameters will inherit information from the previous response unless specified.
+
+```
+workspace=project-name
+allowedTools=["Bash","Edit","Write"]
+mcp_allowed_tools=["mcp__github__get_repo"]
+dangerously-skip-permissions=true
+
+Your actual prompt here
 ```
 
 **Response (Server-Sent Events):**
 ```
 Content-Type: text/event-stream
-Cache-Control: no-cache
-Connection: keep-alive
 
-data: {"type":"system","subtype":"init","session_id":"9c88687a-61ce-4315-afd5-58b7d84ee68b","tools":["Task","Bash"...],"mcp_servers":[]}
+data: {"type":"system","subtype":"init","session_id":"abc123","tools":["Task","Bash"],"mcp_servers":["github","deepwiki"]}
 
-data: {"type":"assistant","message":{"id":"msg_01545CVqvPPL9nn43Ah4WqB2","type":"message","role":"assistant","model":"claude-sonnet-4-20250514","content":[{"type":"text","text":"Hello! I'm Claude Code, ready to help you with software engineering tasks. What would you like me to work on?"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":3,"cache_creation_input_tokens":0,"cache_read_input_tokens":13476,"output_tokens":28,"service_tier":"standard"},"ttftMs":1977},"session_id":"9c88687a-61ce-4315-afd5-58b7d84ee68b"}
-
-data: {"type":"result","subtype":"success","cost_usd":0.00338106,"is_error":false,"duration_ms":2727,"duration_api_ms":4561,"num_turns":1,"result":"Hello! I'm Claude Code, ready to help you with software engineering tasks. What would you like me to work on?","total_cost":0.00338106,"session_id":"9c88687a-61ce-4315-afd5-58b7d84ee68b"}
+data: {"type":"assistant","message":{"content":[{"type":"text","text":"I'll help you analyze this repository..."}]}}
 ```
 
-## Claude Code Command Specifications
+## MCP (Model Context Protocol) Support
 
-### New Session
+### Configuration
+
+Create `mcp-config.json` from the example:
 ```bash
-claude -p --verbose --output-format stream-json "prompt"
+cp mcp-config.json.example mcp-config.json
+# Edit mcp-config.json with your MCP server configurations
 ```
 
-### Resume Session
+## Workspace Management
+
+### Workspace Types
+
+1. **Shared Workspace** (default): `shared_workspace/`
+2. **Custom Workspace**: `workspace/{workspace-name}/`
+
+### Usage Examples
+
+**Shared workspace:**
 ```bash
-claude -p --verbose --resume <claude-session-id> --output-format stream-json "prompt"
+curl -X POST http://localhost:3000/api/claude \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "List files"}'
 ```
 
-### With Permission Options
+**Custom workspace:**
 ```bash
-claude -p --verbose --dangerously-skip-permissions --allowedTools "Bash,Edit" --disallowedTools "WebFetch" --output-format stream-json "prompt"
+curl -X POST http://localhost:3000/api/claude \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Initialize a Node.js project",
+    "workspace": "my-nodejs-app"
+  }'
 ```
 
-## Installation & Usage
+**With MCP tools:**
+```bash
+curl -X POST http://localhost:3000/api/claude \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Analyze the Claude-Code-Server repository",
+    "mcp_allowed_tools": ["mcp__github__get_repo", "mcp__deepwiki__ask_question"]
+  }'
+```
+
+## Installation & Setup
 
 ### Prerequisites
-- Node.js
-- Claude Code CLI installed and configured
-- Claude Code CLI available at `claude`
+
+- **Node.js** 18+
+- **Claude Code CLI** v1.0.18+ installed and configured
+- **MCP servers** (optional, installed via npm)
 
 ### Setup
+
 ```bash
+# Install dependencies
 npm install
 
-# IMPORTANT: If you plan to use dangerously-skip-permissions option,
-# you must accept it in an interactive session first
-claude --dangerously-skip-permissions "test"
-# You will be prompted to accept the permission bypass. Type 'y' to accept.
+# Setup MCP configuration (optional)
+cp mcp-config.json.example mcp-config.json
+# Edit mcp-config.json with your MCP server configurations
 
+# Setup Claude Code permissions (if using dangerously-skip-permissions)
+claude --dangerously-skip-permissions "test"
+# Type 'y' when prompted to accept
+
+# Start server
 npm start
 ```
 
-The server starts on port 3000 and provides the `/api/claude` endpoint for Claude Code interactions.
+The server runs on `http://localhost:3000`
 
-### Example Usage
-
-**New Session:**
-```bash
-curl -X POST http://localhost:3000/api/claude \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Hello, Claude Code!"}' \
-  -N
-```
-
-**Resume Session:**
-```bash
-curl -X POST http://localhost:3000/api/claude \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Continue from where we left off",
-    "session_id": "9c88687a-61ce-4315-afd5-58b7d84ee68b"
-  }' \
-  -N
-```
-
-**With Permission Controls:**
-```bash
-curl -X POST http://localhost:3000/api/claude \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Create a new file",
-    "dangerously-skip-permissions": true,
-    "allowedTools": ["Bash", "Edit", "Write"],
-    "disallowedTools": ["WebFetch", "WebSearch"]
-  }' \
-  -N
-```
-
-### Important Notes
-
-#### Permission Bypass Setup
-Before using `dangerously-skip-permissions: true`, you must accept the permission bypass in an interactive Claude Code session:
+### Development
 
 ```bash
-claude --dangerously-skip-permissions "test"
+npm run dev     # Development server with file watching
+npm run start:bg # Background server
+npm run stop    # Stop background server
+npm run status  # Check server status
+npm run logs    # View server logs
 ```
-
-When prompted, type `y` to accept. This is a one-time setup required by Claude Code CLI for security purposes.
-
-Without this initial acceptance, the server will return an error:
-```
---dangerously-skip-permissions must be accepted in an interactive session first.
-```
-
-#### Open WebUI Integration
-The server includes a pipe implementation for Open WebUI (`open-webui/claude-code.py`). 
-
-**Usage in Open WebUI:**
-```
-# Basic usage
-Hello Claude Code!
-
-# With parameters (first time)
-dangerously-skip-permissions=true
-allowedTools=["Bash","Edit","Write"]
-prompt=Create a hello world JavaScript file
-
-# Subsequent messages (settings auto-inherited)
-Can you add error handling?
-
-# Change settings mid-conversation
-allowedTools=["Read","WebSearch"]
-Research best practices for Node.js
-```
-
-**Settings Inheritance (NEW):**
-- **Auto-Inheritance**: Settings persist throughout the conversation
-- **One-Time Setup**: Specify permissions once, reused automatically
-- **Mid-Conversation Changes**: Override settings anytime by specifying new ones
-- **Conversation Scoped**: Settings reset when starting a new conversation
-
-**Session Management:**
-- Session IDs are automatically extracted from previous assistant responses
-- Sessions persist across conversations in the same chat
-- Session and settings information displayed at start of each response:
-  ```
-  session_id=abc123-def456
-  dangerously-skip-permissions=true
-  allowedTools=["Bash","Edit","Write"]
-  ```
-
-## Architecture
-
-### Process Flow
-
-#### New Session
-1. Server creates workspace directory (`session-{uuid}/`)
-2. Execute `claude -p --verbose --output-format stream-json "prompt"`
-3. Extract Claude Code session_id from system init message
-4. Save Claude Code session_id and workspace path to database
-5. Stream all JSON messages directly to client
-
-#### Session Resume
-1. Validate Claude Code session_id in database
-2. Retrieve workspace path from database
-3. Execute `claude -p --verbose --resume <claude-session-id> --output-format stream-json "prompt"`
-4. Update database with new session_id (Claude Code generates new ID on resume)
-5. Stream all JSON messages directly to client
-
-### Key Features
-
-- **Session Persistence**: Claude Code session_ids are mapped to persistent workspaces
-- **Settings Inheritance**: Permissions auto-inherit within conversations (Open WebUI)
-- **Workspace Isolation**: Each session has its own workspace directory with server-generated UUID
-- **Streaming Response**: Direct streaming of Claude Code output to clients
-- **Permission Control**: API access to Claude Code permission flags
-- **UI Optimization**: Content truncation prevents browser blocking on large outputs
-- **CORS Support**: Cross-origin requests enabled
-
-### Database Management
-
-- SQLite database stores session mappings
-- Primary key: Claude Code session_id
-- Workspace paths use server-generated UUIDs for isolation
-- Session timestamps for lifecycle management
-
-## Development
-
-### Scripts
-- `npm start` - Start production server (foreground)
-- `npm run dev` - Start development server with file watching
-- `npm run start:bg` - Start server in background
-- `npm run stop` - Stop background server
-- `npm run status` - Check server status
-- `npm run logs` - View server logs
-
-### Environment
-The server runs on `0.0.0.0:3000` and is configured for both local and networked access.
