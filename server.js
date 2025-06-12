@@ -12,6 +12,7 @@ async function startServer() {
         properties: {
           prompt: { type: 'string' },
           session_id: { type: 'string' },
+          workspace: { type: 'string' },
           'dangerously-skip-permissions': { type: 'boolean' },
           allowedTools: { type: 'array', items: { type: 'string' } },
           disallowedTools: { type: 'array', items: { type: 'string' } }
@@ -19,13 +20,14 @@ async function startServer() {
       }
     }
   }, async (request, reply) => {
-    const { prompt, session_id, allowedTools, disallowedTools } = request.body
+    const { prompt, session_id, workspace, allowedTools, disallowedTools } = request.body
     const dangerouslySkipPermissions = request.body['dangerously-skip-permissions']
 
     // Log incoming request details
     console.log('=== Claude API Request ===')
     console.log('Prompt:', prompt)
     console.log('Session ID:', session_id || 'new session')
+    console.log('Workspace:', workspace || 'default')
     console.log('Dangerously skip permissions:', dangerouslySkipPermissions || false)
     console.log('Allowed tools:', allowedTools || 'none specified')
     console.log('Disallowed tools:', disallowedTools || 'none specified')
@@ -38,7 +40,7 @@ async function startServer() {
 
     reply.hijack()
     
-    await executeClaudeAndStream(prompt, session_id, { dangerouslySkipPermissions, allowedTools, disallowedTools }, reply)
+    await executeClaudeAndStream(prompt, session_id, { workspace, dangerouslySkipPermissions, allowedTools, disallowedTools }, reply)
   })
 
   // OpenAI Chat API compatible endpoint
@@ -76,8 +78,9 @@ async function startServer() {
     // Get the latest user message
     const userMessage = messages[messages.length - 1]?.content || ''
     
-    // Extract session_id from previous assistant messages
+    // Extract session_id and workspace from previous assistant messages
     let session_id = null
+    let workspace = null
     let prev_dangerously_skip_permissions = null
     let prev_allowedTools = null
     let prev_disallowedTools = null
@@ -88,6 +91,9 @@ async function startServer() {
         
         const sessionMatch = content.match(/session_id=([a-f0-9-]+)/)
         if (sessionMatch) session_id = sessionMatch[1]
+        
+        const workspaceMatch = content.match(/workspace=([^\s\n]+)/)
+        if (workspaceMatch) workspace = workspaceMatch[1]
         
         const dangerMatch = content.match(/dangerously-skip-permissions=(\w+)/)
         if (dangerMatch) prev_dangerously_skip_permissions = dangerMatch[1].toLowerCase() === 'true'
@@ -106,6 +112,9 @@ async function startServer() {
     }
     
     // Parse current message settings
+    const currentWorkspaceMatch = userMessage.match(/workspace=([^\s\n]+)/)
+    if (currentWorkspaceMatch) workspace = currentWorkspaceMatch[1]
+    
     const dangerMatch = userMessage.match(/dangerously-skip-permissions=(\w+)/)
     const dangerouslySkipPermissions = dangerMatch ? 
       dangerMatch[1].toLowerCase() === 'true' : 
@@ -129,7 +138,7 @@ async function startServer() {
     } else {
       // Remove settings from message
       prompt = userMessage.replace(
-        /(dangerously-skip-permissions=\w+|allowedTools=\[[^\]]+\]|disallowedTools=\[[^\]]+\]|prompt="[^"]+"|prompt=)(\s*)/g, 
+        /(workspace=[^\s\n]+|dangerously-skip-permissions=\w+|allowedTools=\[[^\]]+\]|disallowedTools=\[[^\]]+\]|prompt="[^"]+"|prompt=)(\s*)/g, 
         ''
       ).trim()
       if (!prompt) prompt = userMessage
@@ -138,6 +147,7 @@ async function startServer() {
     console.log('=== OpenAI Chat API Request ===')
     console.log('Prompt:', prompt)
     console.log('Session ID:', session_id || 'new session')
+    console.log('Workspace:', workspace || 'default')
     console.log('================================')
     
     reply.hijack()
@@ -202,6 +212,9 @@ async function startServer() {
               
               // Build session info content
               let sessionInfo = `session_id=${sessionId}\n`
+              if (workspace) {
+                sessionInfo += `workspace=${workspace}\n`
+              }
               if (dangerouslySkipPermissions !== null) {
                 sessionInfo += `dangerously-skip-permissions=${dangerouslySkipPermissions}\n`
               }
@@ -362,7 +375,7 @@ async function startServer() {
       originalEnd.call(reply.raw)
     }
     
-    await executeClaudeAndStream(prompt, session_id, { dangerouslySkipPermissions, allowedTools, disallowedTools }, reply)
+    await executeClaudeAndStream(prompt, session_id, { workspace, dangerouslySkipPermissions, allowedTools, disallowedTools }, reply)
   })
 
   try {
