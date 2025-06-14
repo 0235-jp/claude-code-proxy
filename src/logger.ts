@@ -29,43 +29,47 @@ if (NODE_ENV === 'development') {
 }
 
 // Base logger configuration
-const logger = pino({
-  level: LOG_LEVEL,
-  ...(prettyPrint
-    ? {
-        transport: {
-          target: 'pino-pretty',
-          options: prettyPrint,
-        },
-      }
-    : {}),
-  formatters: {
-    level: label => ({ level: label }),
-    log: object => {
-      // Add consistent timestamp and format
-      return {
-        ...object,
-        timestamp: new Date().toISOString(),
-        environment: NODE_ENV,
-      };
+const logger = pino(
+  {
+    level: LOG_LEVEL,
+    ...(prettyPrint && NODE_ENV !== 'test'
+      ? {
+          transport: {
+            target: 'pino-pretty',
+            options: prettyPrint,
+          },
+        }
+      : {}),
+    formatters: {
+      level: label => ({ level: label }),
+      log: object => {
+        // Add consistent timestamp and format
+        return {
+          ...object,
+          timestamp: new Date().toISOString(),
+          environment: NODE_ENV,
+        };
+      },
+    },
+    serializers: {
+      // Custom serializers for common objects
+      error: pino.stdSerializers.err,
+      request: (req: any) => ({
+        method: req.method,
+        url: req.url,
+        headers: req.headers,
+        remoteAddress: req.remoteAddress,
+        remotePort: req.remotePort,
+      }),
+      response: (res: any) => ({
+        statusCode: res.statusCode,
+        headers: res.headers,
+      }),
     },
   },
-  serializers: {
-    // Custom serializers for common objects
-    error: pino.stdSerializers.err,
-    request: (req: any) => ({
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      remoteAddress: req.remoteAddress,
-      remotePort: req.remotePort,
-    }),
-    response: (res: any) => ({
-      statusCode: res.statusCode,
-      headers: res.headers,
-    }),
-  },
-});
+  // In test environment, use a silent stream to avoid file system issues
+  NODE_ENV === 'test' ? require('stream').Writable({ write() {} }) : undefined
+);
 
 /**
  * Create a child logger with component context
