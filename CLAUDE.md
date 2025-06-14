@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Server Management
-- `npm start` - Start the server on port 3000
+- `npm start` - Start the server (default: port 3000, host 0.0.0.0)
 - `npm run dev` - Start development server with file watching (TypeScript)
 - `npm run build` - Build TypeScript to JavaScript
 - `npm run start:bg` - Start server in background with logging to server.log
@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run check-all` - Run all checks (type, lint, format)
 
 ### Testing the Server
-Test the API endpoints using curl:
+Test the API endpoints using curl (default port 3000):
 ```bash
 # Basic request to /api/claude endpoint
 curl -X POST http://localhost:3000/api/claude \
@@ -33,6 +33,11 @@ curl -X POST http://localhost:3000/api/claude \
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+
+# Test with custom port (if PORT environment variable is set)
+curl -X POST http://localhost:8080/api/claude \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "List files"}'
 ```
 
 ## Architecture Overview
@@ -46,7 +51,7 @@ The server follows a modular architecture with clear separation of concerns:
 
 2. **claude-executor.js** - Handles Claude CLI process execution:
    - Spawns `claude` CLI processes with appropriate flags
-   - Manages process timeouts (total: 60 minutes, inactivity: 5 minutes)
+   - Manages configurable process timeouts (default: total 60 minutes, inactivity 5 minutes)
    - Combines regular tools with MCP tools for `--allowedTools` flag
 
 3. **session-manager.js** - Workspace isolation:
@@ -78,8 +83,31 @@ The server follows a modular architecture with clear separation of concerns:
 - Workspace directories are auto-created and gitignored
 
 ### Environment Variables
-- `WORKSPACE_BASE_PATH` - Base directory for workspace creation (default: project root directory)
-  - Example: `WORKSPACE_BASE_PATH=/tmp/claude-workspaces`
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Port for the server to listen on |
+| `HOST` | `0.0.0.0` | Host address for the server to bind to |
+| `CLAUDE_TOTAL_TIMEOUT_MS` | `3600000` | Total timeout for Claude processes (1 hour) |
+| `CLAUDE_INACTIVITY_TIMEOUT_MS` | `300000` | Inactivity timeout for Claude processes (5 minutes) |
+| `PROCESS_KILL_TIMEOUT_MS` | `5000` | Timeout before force-killing processes (5 seconds) |
+| `MCP_CONFIG_PATH` | `../mcp-config.json` | Path to MCP configuration file (relative to dist directory) |
+| `WORKSPACE_BASE_PATH` | project root | Base directory for workspace creation |
+
+**Usage Examples:**
+```bash
+# Start server on custom port and host
+PORT=8080 HOST=127.0.0.1 npm start
+
+# Set custom timeouts (2 hours total, 10 minutes inactivity)
+CLAUDE_TOTAL_TIMEOUT_MS=7200000 CLAUDE_INACTIVITY_TIMEOUT_MS=600000 npm start
+
+# Use custom workspace location
+WORKSPACE_BASE_PATH=/tmp/claude-workspaces npm start
+
+# Use custom MCP config location
+MCP_CONFIG_PATH=/path/to/my-mcp-config.json npm start
+```
 
 ### Dependencies
 - Requires Claude Code CLI v1.0.18+ to be installed and configured
