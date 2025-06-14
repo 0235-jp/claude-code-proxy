@@ -4,6 +4,7 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import 'dotenv/config';
 
 /**
  * Create workspace directory for Claude session
@@ -11,12 +12,13 @@ import * as path from 'path';
  * @returns Path to created workspace directory
  */
 export async function createWorkspace(workspaceName: string | null = null): Promise<string> {
+  const baseWorkspacePath = process.env.WORKSPACE_BASE_PATH || path.join(__dirname, '..');
   let workspacePath: string;
 
   if (workspaceName) {
-    workspacePath = path.join(__dirname, '..', 'workspace', workspaceName);
+    workspacePath = path.join(baseWorkspacePath, 'workspace', workspaceName);
   } else {
-    workspacePath = path.join(__dirname, '..', 'shared_workspace');
+    workspacePath = path.join(baseWorkspacePath, 'shared_workspace');
   }
 
   await fs.mkdir(workspacePath, { recursive: true });

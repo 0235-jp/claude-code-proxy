@@ -4,7 +4,8 @@
   "main": "dist/server.js",
   "dependencies": {
     "fastify": "^4.x",
-    "@fastify/cors": "^9.x"
+    "@fastify/cors": "^9.x",
+    "dotenv": "^16.x"
   },
   "devDependencies": {
     "typescript": "^5.x",
