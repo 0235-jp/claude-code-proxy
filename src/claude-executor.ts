@@ -71,6 +71,73 @@ function executeClaudeCommand(
 }
 
 /**
+ * Track active Claude processes for cleanup
+ */
+const activeProcesses = new Set<ChildProcess>();
+
+/**
+ * Cleanup function to kill all active processes
+ */
+function cleanupActiveProcesses(): void {
+  console.log(`Cleaning up ${activeProcesses.size} active processes`);
+  activeProcesses.forEach(proc => {
+    if (proc && !proc.killed) {
+      console.log(`Killing process ${proc.pid}`);
+      proc.kill('SIGTERM');
+      // If SIGTERM doesn't work, force kill after 5 seconds
+      setTimeout(() => {
+        if (proc && !proc.killed) {
+          console.log(`Force killing process ${proc.pid}`);
+          proc.kill('SIGKILL');
+        }
+      }, 5000);
+    }
+  });
+  activeProcesses.clear();
+}
+
+/**
+ * Setup process signal handlers for graceful shutdown
+ */
+function setupSignalHandlers(): void {
+  let handlersSetup = false;
+
+  if (!handlersSetup) {
+    process.on('SIGTERM', () => {
+      console.log('Received SIGTERM, cleaning up processes...');
+      cleanupActiveProcesses();
+      process.exit(0);
+    });
+
+    process.on('SIGINT', () => {
+      console.log('Received SIGINT, cleaning up processes...');
+      cleanupActiveProcesses();
+      process.exit(0);
+    });
+
+    process.on('SIGQUIT', () => {
+      console.log('Received SIGQUIT, cleaning up processes...');
+      cleanupActiveProcesses();
+      process.exit(0);
+    });
+
+    handlersSetup = true;
+  }
+}
+
+/**
+ * Check for and clean up zombie processes
+ */
+function cleanupZombieProcesses(): void {
+  activeProcesses.forEach(proc => {
+    if (proc && proc.killed && !proc.exitCode && !proc.signalCode) {
+      console.log(`Removing zombie process ${proc.pid} from active list`);
+      activeProcesses.delete(proc);
+    }
+  });
+}
+
+/**
  * Execute Claude command and stream responses to client
  * @param prompt - The prompt to send to Claude
  * @param claudeSessionId - Session ID to resume (optional)
@@ -111,7 +178,16 @@ export async function executeClaudeAndStream(
   const timeoutMs = 3600000; // 1 hour
   console.log(`Total timeout set to: ${timeoutMs}ms (${timeoutMs / 60000} minutes)`);
 
+  // Setup signal handlers for graceful shutdown
+  setupSignalHandlers();
+
+  // Clean up any zombie processes
+  cleanupZombieProcesses();
+
   const claudeProcess = executeClaudeCommand(prompt, claudeSessionId, workspacePath, options);
+
+  // Track this process for cleanup
+  activeProcesses.add(claudeProcess);
 
   claudeProcess.on('spawn', () => {
     console.log('Claude process spawned successfully');
@@ -122,6 +198,13 @@ export async function executeClaudeAndStream(
   const totalTimeout = setTimeout(() => {
     console.log('Claude process total timeout - killing process');
     claudeProcess.kill('SIGTERM');
+    // Force kill if SIGTERM doesn't work
+    setTimeout(() => {
+      if (claudeProcess && !claudeProcess.killed) {
+        console.log('Force killing Claude process after timeout');
+        claudeProcess.kill('SIGKILL');
+      }
+    }, 5000);
     reply.raw.write(
       `data: ${JSON.stringify({
         type: 'result',
@@ -140,6 +223,13 @@ export async function executeClaudeAndStream(
     inactivityTimeout = setTimeout(() => {
       console.log('Claude process inactivity timeout - killing process');
       claudeProcess.kill('SIGTERM');
+      // Force kill if SIGTERM doesn't work
+      setTimeout(() => {
+        if (claudeProcess && !claudeProcess.killed) {
+          console.log('Force killing Claude process after inactivity timeout');
+          claudeProcess.kill('SIGKILL');
+        }
+      }, 5000);
       reply.raw.write(
         `data: ${JSON.stringify({
           type: 'result',
@@ -182,10 +272,14 @@ export async function executeClaudeAndStream(
     console.error('Claude stderr:', data.toString());
   });
 
-  claudeProcess.on('close', (code: number | null) => {
-    console.log(`Claude process exited with code ${code}`);
+  claudeProcess.on('close', (code: number | null, signal: string | null) => {
+    console.log(`Claude process exited with code ${code}, signal ${signal}`);
     clearTimeout(totalTimeout);
     if (inactivityTimeout) clearTimeout(inactivityTimeout);
+
+    // Remove from active processes
+    activeProcesses.delete(claudeProcess);
+
     reply.raw.end();
   });
 
@@ -193,6 +287,10 @@ export async function executeClaudeAndStream(
     console.error('Claude process error:', error);
     clearTimeout(totalTimeout);
     if (inactivityTimeout) clearTimeout(inactivityTimeout);
+
+    // Remove from active processes
+    activeProcesses.delete(claudeProcess);
+
     reply.raw.write(
       `data: ${JSON.stringify({
         type: 'result',
@@ -203,5 +301,17 @@ export async function executeClaudeAndStream(
       })}\n\n`
     );
     reply.raw.end();
+  });
+
+  // Handle process disconnection
+  claudeProcess.on('disconnect', () => {
+    console.log('Claude process disconnected');
+    activeProcesses.delete(claudeProcess);
+  });
+
+  // Handle process exit
+  claudeProcess.on('exit', (code: number | null, signal: string | null) => {
+    console.log(`Claude process exit with code ${code}, signal ${signal}`);
+    activeProcesses.delete(claudeProcess);
   });
 }
