@@ -6,13 +6,16 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import { executeClaudeAndStream } from '../src/claude-executor';
 import { loadMcpConfig } from '../src/mcp-manager';
+import { performHealthCheck } from '../src/health-checker';
 
 // Mock dependencies
 jest.mock('../src/claude-executor');
 jest.mock('../src/mcp-manager');
+jest.mock('../src/health-checker');
 
 const mockExecuteClaudeAndStream = executeClaudeAndStream as jest.MockedFunction<typeof executeClaudeAndStream>;
 const mockLoadMcpConfig = loadMcpConfig as jest.MockedFunction<typeof loadMcpConfig>;
+const mockPerformHealthCheck = performHealthCheck as jest.MockedFunction<typeof performHealthCheck>;
 
 // Helper to create test server
 async function createTestServer() {
@@ -22,6 +25,48 @@ async function createTestServer() {
   // Mock MCP config loading
   mockLoadMcpConfig.mockResolvedValue(null);
   await mockLoadMcpConfig();
+
+  // Health check endpoint
+  app.get('/health', async (_request: any, reply: any) => {
+    try {
+      const healthStatus = await performHealthCheck();
+      
+      // Set appropriate HTTP status code based on health
+      let statusCode = 200;
+      if (healthStatus.status === 'degraded') {
+        statusCode = 200; // Still operational but with issues
+      } else if (healthStatus.status === 'unhealthy') {
+        statusCode = 503; // Service unavailable
+      }
+      
+      reply.code(statusCode).send(healthStatus);
+    } catch (error) {
+      reply.code(500).send({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Unknown error',
+        uptime: process.uptime(),
+        version: 'unknown',
+        checks: {
+          claudeCli: {
+            status: 'unhealthy',
+            message: 'Health check failed',
+            timestamp: new Date().toISOString()
+          },
+          workspace: {
+            status: 'unhealthy', 
+            message: 'Health check failed',
+            timestamp: new Date().toISOString()
+          },
+          mcpConfig: {
+            status: 'unhealthy',
+            message: 'Health check failed', 
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+    }
+  });
 
   // Setup Claude API route
   app.post<{ Body: any }>('/api/claude', {
@@ -630,6 +675,159 @@ describe('Server Unit Tests', () => {
       // Should still create server even if MCP config fails
       const app = await createTestServer();
       expect(app).toBeDefined();
+
+      await app.close();
+    });
+  });
+
+  describe('Health Check Endpoint', () => {
+    it('should return healthy status', async () => {
+      const app = await createTestServer();
+      
+      mockPerformHealthCheck.mockResolvedValue({
+        status: 'healthy',
+        timestamp: '2025-06-14T16:25:58.963Z',
+        uptime: 129.465,
+        version: '1.0.0',
+        checks: {
+          claudeCli: {
+            status: 'healthy',
+            message: 'Claude CLI is available and responsive',
+            timestamp: '2025-06-14T16:25:58.963Z'
+          },
+          workspace: {
+            status: 'healthy',
+            message: 'Workspace directory is accessible and writable',
+            timestamp: '2025-06-14T16:25:58.965Z'
+          },
+          mcpConfig: {
+            status: 'healthy',
+            message: 'MCP is disabled (no configuration file found)',
+            timestamp: '2025-06-14T16:25:58.965Z'
+          }
+        }
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toMatchObject({
+        status: 'healthy',
+        uptime: 129.465,
+        version: '1.0.0',
+        checks: {
+          claudeCli: { status: 'healthy' },
+          workspace: { status: 'healthy' },
+          mcpConfig: { status: 'healthy' }
+        }
+      });
+
+      await app.close();
+    });
+
+    it('should return degraded status with 200 code', async () => {
+      const app = await createTestServer();
+      
+      mockPerformHealthCheck.mockResolvedValue({
+        status: 'degraded',
+        timestamp: '2025-06-14T16:25:58.963Z',
+        uptime: 129.465,
+        version: '1.0.0',
+        checks: {
+          claudeCli: {
+            status: 'healthy',
+            message: 'Claude CLI is available and responsive',
+            timestamp: '2025-06-14T16:25:58.963Z'
+          },
+          workspace: {
+            status: 'degraded',
+            message: 'Workspace directory is readable but not writable',
+            timestamp: '2025-06-14T16:25:58.965Z'
+          },
+          mcpConfig: {
+            status: 'healthy',
+            message: 'MCP is disabled (no configuration file found)',
+            timestamp: '2025-06-14T16:25:58.965Z'
+          }
+        }
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toMatchObject({
+        status: 'degraded'
+      });
+
+      await app.close();
+    });
+
+    it('should return unhealthy status with 503 code', async () => {
+      const app = await createTestServer();
+      
+      mockPerformHealthCheck.mockResolvedValue({
+        status: 'unhealthy',
+        timestamp: '2025-06-14T16:25:58.963Z',
+        uptime: 129.465,
+        version: '1.0.0',
+        checks: {
+          claudeCli: {
+            status: 'unhealthy',
+            message: 'Claude CLI is not available',
+            timestamp: '2025-06-14T16:25:58.963Z'
+          },
+          workspace: {
+            status: 'healthy',
+            message: 'Workspace directory is accessible and writable',
+            timestamp: '2025-06-14T16:25:58.965Z'
+          },
+          mcpConfig: {
+            status: 'healthy',
+            message: 'MCP is disabled (no configuration file found)',
+            timestamp: '2025-06-14T16:25:58.965Z'
+          }
+        }
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(JSON.parse(response.payload)).toMatchObject({
+        status: 'unhealthy'
+      });
+
+      await app.close();
+    });
+
+    it('should handle health check errors with 500 code', async () => {
+      const app = await createTestServer();
+      
+      mockPerformHealthCheck.mockRejectedValue(new Error('Health check failed'));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(500);
+      const payload = JSON.parse(response.payload);
+      expect(payload).toMatchObject({
+        status: 'unhealthy',
+        error: 'Health check failed',
+        version: 'unknown'
+      });
+      expect(payload.checks).toHaveProperty('claudeCli');
+      expect(payload.checks).toHaveProperty('workspace');
+      expect(payload.checks).toHaveProperty('mcpConfig');
 
       await app.close();
     });
