@@ -74,7 +74,12 @@ The server follows a modular architecture with clear separation of concerns:
 
 ### Configuration Files
 - `mcp-config.json` - MCP server configurations (create from `mcp-config.json.example`)
+- `.env` - Environment variables for server configuration (optional)
 - Workspace directories are auto-created and gitignored
+
+### Environment Variables
+- `WORKSPACE_BASE_PATH` - Base directory for workspace creation (default: project root directory)
+  - Example: `WORKSPACE_BASE_PATH=/tmp/claude-workspaces`
 
 ### Dependencies
 - Requires Claude Code CLI v1.0.18+ to be installed and configured
