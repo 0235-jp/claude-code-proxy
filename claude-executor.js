@@ -14,6 +14,10 @@ function executeClaudeCommand(prompt, claudeSessionId, workspacePath, options = 
     args.push('--dangerously-skip-permissions')
   }
 
+  if (options.systemPrompt) {
+    args.push('--system-prompt', options.systemPrompt)
+  }
+
   // Collect all allowed tools (regular + MCP)
   let allAllowedTools = []
   if (options.allowedTools && options.allowedTools.length > 0) {
