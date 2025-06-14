@@ -3,23 +3,28 @@
   "version": "1.0.0",
   "main": "dist/server.js",
   "dependencies": {
-    "fastify": "^4.x",
     "@fastify/cors": "^9.x",
-    "dotenv": "^16.x"
+    "dotenv": "^16.x",
+    "fastify": "^4.x"
   },
   "devDependencies": {
-    "typescript": "^5.x",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20.x",
-    "ts-node": "^10.x",
-    "nodemon": "^3.x",
-    "eslint": "^8.x",
+    "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^6.x",
     "@typescript-eslint/parser": "^6.x",
-    "prettier": "^3.x",
+    "eslint": "^8.x",
     "eslint-config-prettier": "^9.x",
     "eslint-plugin-prettier": "^5.x",
     "husky": "^8.x",
-    "lint-staged": "^15.x"
+    "jest": "^30.0.0",
+    "lint-staged": "^15.x",
+    "nodemon": "^3.x",
+    "prettier": "^3.x",
+    "supertest": "^7.1.1",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.x",
+    "typescript": "^5.x"
   },
   "scripts": {
     "build": "tsc",
@@ -37,6 +42,13 @@
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "check-all": "npm run type-check && npm run lint && npm run format:check",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:e2e": "jest tests/e2e.test.ts --testTimeout=30000",
+    "test:unit": "jest --testPathIgnorePatterns='tests/e2e.test.ts|tests/server.integration.test.ts'",
+    "test:ci": "npm run test:unit && npm run test:coverage",
+    "ci:full": "npm run type-check && npm run lint && npm run format:check && npm run test:coverage && npm run build",
     "prepare": "husky install"
   },
   "lint-staged": {
