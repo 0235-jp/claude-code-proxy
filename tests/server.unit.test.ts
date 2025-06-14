@@ -50,17 +50,7 @@ async function createTestServer() {
     const mcpAllowedTools = request.body['mcp-allowed-tools'];
     const dangerouslySkipPermissions = request.body['dangerously-skip-permissions'];
 
-    // Log incoming request details (testing server behavior)
-    console.log('=== Claude API Request ===');
-    console.log('Prompt:', prompt);
-    console.log('Session ID:', sessionId || 'new session');
-    console.log('Workspace:', workspace || 'default');
-    console.log('System Prompt:', systemPrompt || 'none specified');
-    console.log('Dangerously skip permissions:', dangerouslySkipPermissions || false);
-    console.log('Allowed tools:', allowedTools || 'none specified');
-    console.log('Disallowed tools:', disallowedTools || 'none specified');
-    console.log('MCP allowed tools:', mcpAllowedTools || 'none specified');
-    console.log('==========================');
+    // Test server behavior without logging user data for security
 
     reply
       .type('text/event-stream')
@@ -231,12 +221,7 @@ async function createTestServer() {
       if (!prompt) prompt = userMessage;
     }
 
-    console.log('=== OpenAI Chat API Request ===');
-    console.log('Prompt:', prompt);
-    console.log('Session ID:', session_id || 'new session');
-    console.log('Workspace:', workspace || 'default');
-    console.log('System Prompt:', systemPrompt || 'none specified');
-    console.log('================================');
+    // OpenAI Chat API test without logging user data for security
 
     if (process.env.NODE_ENV === 'test') {
       await executeClaudeAndStream(
