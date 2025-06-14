@@ -168,7 +168,16 @@ WORKSPACE_BASE_PATH=/tmp/claude-workspaces
 ```
 
 **Environment Variables:**
-- `WORKSPACE_BASE_PATH` - Base directory for workspace creation (default: project root directory)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Port for the server to listen on |
+| `HOST` | `0.0.0.0` | Host address for the server to bind to |
+| `CLAUDE_TOTAL_TIMEOUT_MS` | `3600000` | Total timeout for Claude processes (1 hour) |
+| `CLAUDE_INACTIVITY_TIMEOUT_MS` | `300000` | Inactivity timeout for Claude processes (5 minutes) |
+| `PROCESS_KILL_TIMEOUT_MS` | `5000` | Timeout before force-killing processes (5 seconds) |
+| `MCP_CONFIG_PATH` | `../mcp-config.json` | Path to MCP configuration file |
+| `WORKSPACE_BASE_PATH` | project root | Base directory for workspace creation |
 
 ### Usage Examples
 
@@ -240,6 +249,24 @@ npm start
 ```
 
 The server runs on `http://localhost:3000`
+
+### Custom Configuration
+
+You can customize server behavior using environment variables:
+
+```bash
+# Start server on custom port and host
+PORT=8080 HOST=127.0.0.1 npm start
+
+# Set custom timeouts (in milliseconds)
+CLAUDE_TOTAL_TIMEOUT_MS=7200000 CLAUDE_INACTIVITY_TIMEOUT_MS=600000 npm start
+
+# Use custom workspace location
+WORKSPACE_BASE_PATH=/tmp/my-workspaces npm start
+
+# Combine multiple settings
+PORT=8080 WORKSPACE_BASE_PATH=/tmp/workspaces npm start
+```
 
 ### Development
 

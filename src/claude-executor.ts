@@ -47,7 +47,8 @@ function executeClaudeCommand(
   if (isMcpEnabled() && options.mcpAllowedTools && options.mcpAllowedTools.length > 0) {
     const validMcpTools = validateMcpTools(options.mcpAllowedTools);
     if (validMcpTools.length > 0) {
-      const mcpConfigPath = path.join(__dirname, '..', 'mcp-config.json');
+      const mcpConfigPath =
+        process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json');
       args.push('--mcp-config', mcpConfigPath);
       allAllowedTools = [...allAllowedTools, ...validMcpTools];
       console.log('MCP enabled with tools:', validMcpTools);
@@ -91,13 +92,14 @@ export function cleanupActiveProcesses(): void {
     if (proc && !proc.killed) {
       console.log(`Killing process ${proc.pid}`);
       proc.kill('SIGTERM');
-      // If SIGTERM doesn't work, force kill after 5 seconds
+      // If SIGTERM doesn't work, force kill after configured timeout
+      const killTimeoutMs = parseInt(process.env.PROCESS_KILL_TIMEOUT_MS || '5000', 10);
       setTimeout(() => {
         if (proc && !proc.killed) {
           console.log(`Force killing process ${proc.pid}`);
           proc.kill('SIGKILL');
         }
-      }, 5000);
+      }, killTimeoutMs);
     }
   });
   activeProcesses.clear();
@@ -183,7 +185,7 @@ export async function executeClaudeAndStream(
     console.log('MCP not enabled (no mcp-config.json found)');
   }
 
-  const timeoutMs = 3600000; // 1 hour
+  const timeoutMs = parseInt(process.env.CLAUDE_TOTAL_TIMEOUT_MS || '3600000', 10); // Default: 1 hour
   console.log(`Total timeout set to: ${timeoutMs}ms (${timeoutMs / 60000} minutes)`);
 
   // Setup signal handlers for graceful shutdown
@@ -207,12 +209,13 @@ export async function executeClaudeAndStream(
     console.log('Claude process total timeout - killing process');
     claudeProcess.kill('SIGTERM');
     // Force kill if SIGTERM doesn't work
+    const killTimeoutMs = parseInt(process.env.PROCESS_KILL_TIMEOUT_MS || '5000', 10);
     setTimeout(() => {
       if (claudeProcess && !claudeProcess.killed) {
         console.log('Force killing Claude process after timeout');
         claudeProcess.kill('SIGKILL');
       }
-    }, 5000);
+    }, killTimeoutMs);
     reply.raw.write(
       `data: ${JSON.stringify({
         type: 'result',
@@ -225,6 +228,7 @@ export async function executeClaudeAndStream(
     reply.raw.end();
   }, timeoutMs);
 
+  const inactivityTimeoutMs = parseInt(process.env.CLAUDE_INACTIVITY_TIMEOUT_MS || '300000', 10); // Default: 5 minutes
   let inactivityTimeout: NodeJS.Timeout;
   const resetInactivityTimeout = (): void => {
     if (inactivityTimeout) clearTimeout(inactivityTimeout);
@@ -232,23 +236,24 @@ export async function executeClaudeAndStream(
       console.log('Claude process inactivity timeout - killing process');
       claudeProcess.kill('SIGTERM');
       // Force kill if SIGTERM doesn't work
+      const killTimeoutMs = parseInt(process.env.PROCESS_KILL_TIMEOUT_MS || '5000', 10);
       setTimeout(() => {
         if (claudeProcess && !claudeProcess.killed) {
           console.log('Force killing Claude process after inactivity timeout');
           claudeProcess.kill('SIGKILL');
         }
-      }, 5000);
+      }, killTimeoutMs);
       reply.raw.write(
         `data: ${JSON.stringify({
           type: 'result',
           subtype: 'timeout',
           is_error: true,
-          result: 'Inactivity timeout (5 minutes since last output)',
+          result: `Inactivity timeout (${inactivityTimeoutMs / 60000} minutes since last output)`,
           session_id: claudeSessionId || null,
         })}\n\n`
       );
       reply.raw.end();
-    }, 300000);
+    }, inactivityTimeoutMs);
   };
   resetInactivityTimeout();
 
