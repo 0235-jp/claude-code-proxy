@@ -268,14 +268,17 @@ async function startServer(): Promise<void> {
             },
           ],
         };
-        (originalWrite as any).call(reply.raw, `data: ${JSON.stringify(chunk)}\n\n`);
+        (originalWrite as (chunk: Buffer | string) => boolean).call(
+          reply.raw,
+          `data: ${JSON.stringify(chunk)}\n\n`
+        );
       }
 
-      reply.raw.write = function (chunk: Buffer | string): any {
+      reply.raw.write = function (chunk: Buffer | string): boolean {
         if (chunk.toString().startsWith('data: ')) {
           try {
             const jsonStr = chunk.toString().replace('data: ', '').trim();
-            if (!jsonStr) return;
+            if (!jsonStr) return true;
 
             const buffer = jsonStr;
             const jsonData: StreamJsonData = JSON.parse(buffer);
@@ -324,7 +327,10 @@ async function startServer(): Promise<void> {
                     },
                   ],
                 };
-                (originalWrite as any).call(reply.raw, `data: ${JSON.stringify(roleChunk)}\n\n`);
+                (originalWrite as (chunk: Buffer | string) => boolean).call(
+                  reply.raw,
+                  `data: ${JSON.stringify(roleChunk)}\n\n`
+                );
 
                 // Send session info in chunks (only once)
                 const chunks = splitIntoChunks(sessionInfo);
@@ -410,7 +416,10 @@ async function startServer(): Promise<void> {
                     },
                   ],
                 };
-                (originalWrite as any).call(reply.raw, `data: ${JSON.stringify(finalChunk)}\n\n`);
+                (originalWrite as (chunk: Buffer | string) => boolean).call(
+                  reply.raw,
+                  `data: ${JSON.stringify(finalChunk)}\n\n`
+                );
               }
             } else if (jsonData.type === 'user') {
               const message = jsonData.message || {};
@@ -455,11 +464,14 @@ async function startServer(): Promise<void> {
             }
           }
         }
+        return true;
       };
 
-      reply.raw.end = function (): any {
-        (originalWrite as any).call(reply.raw, 'data: [DONE]\n\n');
-        (originalEnd as any).call(reply.raw);
+      (reply.raw as unknown as { end: (...args: unknown[]) => unknown }).end = function (
+        ...args: unknown[]
+      ): unknown {
+        (originalWrite as (chunk: Buffer | string) => boolean).call(reply.raw, 'data: [DONE]\n\n');
+        return (originalEnd as (...args: unknown[]) => unknown).call(reply.raw, ...args);
       };
 
       await executeClaudeAndStream(
