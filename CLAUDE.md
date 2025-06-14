@@ -6,11 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Server Management
 - `npm start` - Start the server on port 3000
-- `npm run dev` - Start development server with file watching
+- `npm run dev` - Start development server with file watching (TypeScript)
+- `npm run build` - Build TypeScript to JavaScript
 - `npm run start:bg` - Start server in background with logging to server.log
 - `npm run stop` - Stop background server
 - `npm run status` - Check if background server is running
 - `npm run logs` - View server logs (tail -f server.log)
+
+### Code Quality
+- `npm run lint` - Run ESLint on TypeScript files
+- `npm run lint:fix` - Run ESLint with auto-fix
+- `npm run format` - Format code with Prettier
+- `npm run format:check` - Check code formatting
+- `npm run type-check` - Run TypeScript type checking
+- `npm run check-all` - Run all checks (type, lint, format)
 
 ### Testing the Server
 Test the API endpoints using curl:

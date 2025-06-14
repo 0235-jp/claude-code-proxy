@@ -1,5 +1,7 @@
 # Claude Code Server
 
+[![CI](https://github.com/0235-jp/Claude-Code-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/0235-jp/Claude-Code-Server/actions/workflows/ci.yml)
+
 A streaming API server that provides HTTP access to Claude Code CLI functionality with MCP support.
 
 ## Overview
@@ -18,20 +20,33 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.
 
 ## Tech Stack
 
+- **TypeScript** - Type-safe JavaScript development
 - **Fastify** - Web framework
 - **Claude Code CLI** - v1.0.18+ with MCP support
 - **Node.js** - Runtime environment
 - **MCP (Model Context Protocol)** - External data source integration
+- **ESLint + Prettier** - Code quality and formatting
+- **GitHub Actions** - CI/CD pipeline
 
 ## Project Structure
 
 ```
 claude-code-server/
+├── .github/
+│   └── workflows/
+│       └── ci.yml          # GitHub Actions CI/CD workflow
+├── src/
+│   ├── server.ts           # Fastify server with dual API endpoints
+│   ├── claude-executor.ts  # Claude Code execution with MCP support
+│   ├── session-manager.ts  # Workspace management
+│   ├── mcp-manager.ts      # MCP configuration handling
+│   └── types.ts            # TypeScript type definitions
+├── dist/                   # Compiled TypeScript output
 ├── package.json
-├── server.js              # Fastify server with dual API endpoints
-├── claude-executor.js     # Claude Code execution with MCP support
-├── session-manager.js     # Workspace management
-├── mcp-manager.js         # MCP configuration handling
+├── tsconfig.json           # TypeScript configuration
+├── .eslintrc.js           # ESLint configuration
+├── .prettierrc            # Prettier configuration
+├── .husky/                # Git hooks for code quality
 ├── mcp-config.json        # MCP server configuration (gitignored)
 ├── mcp-config.json.example # MCP configuration template
 ├── shared_workspace/      # Default workspace (gitignored)
@@ -208,9 +223,28 @@ The server runs on `http://localhost:3000`
 ### Development
 
 ```bash
+# Development
 npm run dev     # Development server with file watching
 npm run start:bg # Background server
 npm run stop    # Stop background server
 npm run status  # Check server status
 npm run logs    # View server logs
+
+# Code Quality
+npm run build        # Compile TypeScript
+npm run type-check   # Run TypeScript compiler
+npm run lint         # Run ESLint
+npm run lint:fix     # Fix ESLint issues automatically
+npm run format       # Format code with Prettier
+npm run format:check # Check code formatting
+npm run check-all    # Run all checks (type-check, lint, format)
 ```
+
+## Development Features
+
+- **Type Safety**: Full TypeScript implementation with strict type checking
+- **Code Quality**: ESLint with TypeScript support for code quality enforcement
+- **Code Formatting**: Prettier for consistent code formatting
+- **Pre-commit Hooks**: Husky + lint-staged for automated code quality checks
+- **CI/CD**: GitHub Actions workflow for automated testing and building
+- **Hot Reload**: Development server with file watching for faster development
