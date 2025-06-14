@@ -1,17 +1,27 @@
 {
   "name": "claude-code-chat-server",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "dist/server.js",
   "dependencies": {
     "fastify": "^4.x",
     "@fastify/cors": "^9.x"
   },
+  "devDependencies": {
+    "typescript": "^5.x",
+    "@types/node": "^20.x",
+    "ts-node": "^10.x",
+    "nodemon": "^3.x"
+  },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "start:bg": "nohup node server.js > server.log 2>&1 & echo $! > server.pid",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "nodemon --exec ts-node src/server.ts",
+    "dev:build": "tsc --watch",
+    "start:bg": "npm run build && nohup node dist/server.js > server.log 2>&1 & echo $! > server.pid",
     "stop": "kill $(cat server.pid) && rm server.pid",
     "status": "ps -p $(cat server.pid) > /dev/null 2>&1 && echo 'Server is running (PID: '$(cat server.pid)')' || echo 'Server is not running'",
-    "logs": "tail -f server.log"
+    "logs": "tail -f server.log",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
   }
 }
