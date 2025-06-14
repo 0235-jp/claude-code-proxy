@@ -7,15 +7,18 @@ import cors from '@fastify/cors';
 import { executeClaudeAndStream } from '../src/claude-executor';
 import { loadMcpConfig } from '../src/mcp-manager';
 import { performHealthCheck } from '../src/health-checker';
+import { authenticateRequest } from '../src/auth';
 
 // Mock dependencies
 jest.mock('../src/claude-executor');
 jest.mock('../src/mcp-manager');
 jest.mock('../src/health-checker');
+jest.mock('../src/auth');
 
 const mockExecuteClaudeAndStream = executeClaudeAndStream as jest.MockedFunction<typeof executeClaudeAndStream>;
 const mockLoadMcpConfig = loadMcpConfig as jest.MockedFunction<typeof loadMcpConfig>;
 const mockPerformHealthCheck = performHealthCheck as jest.MockedFunction<typeof performHealthCheck>;
+const mockAuthenticateRequest = authenticateRequest as jest.MockedFunction<typeof authenticateRequest>;
 
 // Helper to create test server
 async function createTestServer() {
@@ -70,6 +73,7 @@ async function createTestServer() {
 
   // Setup Claude API route
   app.post<{ Body: any }>('/api/claude', {
+    preHandler: authenticateRequest,
     schema: {
       body: {
         type: 'object',
@@ -139,6 +143,7 @@ async function createTestServer() {
 
   // Setup OpenAI API route
   app.post<{ Body: any }>('/v1/chat/completions', {
+    preHandler: authenticateRequest,
     schema: {
       body: {
         type: 'object',
@@ -320,6 +325,9 @@ describe('Server Unit Tests', () => {
     
     // Mock executeClaudeAndStream to prevent actual execution
     mockExecuteClaudeAndStream.mockResolvedValue();
+    
+    // Mock authentication to pass by default
+    mockAuthenticateRequest.mockResolvedValue();
   });
 
   afterEach(() => {
@@ -828,6 +836,155 @@ describe('Server Unit Tests', () => {
       expect(payload.checks).toHaveProperty('claudeCli');
       expect(payload.checks).toHaveProperty('workspace');
       expect(payload.checks).toHaveProperty('mcpConfig');
+
+      await app.close();
+    });
+  });
+
+  describe('Authentication Integration', () => {
+    it('should call authenticateRequest before processing Claude API request', async () => {
+      const app = await createTestServer();
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/claude',
+        payload: { prompt: 'Test' },
+      });
+
+      expect(mockAuthenticateRequest).toHaveBeenCalled();
+
+      await app.close();
+    });
+
+    it('should call authenticateRequest before processing OpenAI API request', async () => {
+      const app = await createTestServer();
+
+      await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          messages: [{ role: 'user', content: 'Test' }],
+          stream: true
+        },
+      });
+
+      expect(mockAuthenticateRequest).toHaveBeenCalled();
+
+      await app.close();
+    });
+
+    it('should not call authenticateRequest for health endpoint', async () => {
+      const app = await createTestServer();
+      mockPerformHealthCheck.mockResolvedValue({
+        status: 'healthy',
+        timestamp: '2025-06-14T16:25:58.963Z',
+        uptime: 129.465,
+        version: '1.0.0',
+        checks: {
+          claudeCli: { status: 'healthy', message: 'OK', timestamp: '2025-06-14T16:25:58.963Z' },
+          workspace: { status: 'healthy', message: 'OK', timestamp: '2025-06-14T16:25:58.965Z' },
+          mcpConfig: { status: 'healthy', message: 'OK', timestamp: '2025-06-14T16:25:58.965Z' }
+        }
+      });
+
+      await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(mockAuthenticateRequest).not.toHaveBeenCalled();
+
+      await app.close();
+    });
+
+    it('should block request when authentication fails for Claude API', async () => {
+      const app = await createTestServer();
+      
+      // Mock authentication to reject with 401
+      mockAuthenticateRequest.mockImplementation(async (_request, reply) => {
+        reply.code(401).send({
+          error: {
+            message: 'Invalid authentication credentials',
+            type: 'invalid_request_error',
+            code: 'invalid_api_key'
+          }
+        });
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/claude',
+        payload: { prompt: 'Test' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(JSON.parse(response.payload)).toEqual({
+        error: {
+          message: 'Invalid authentication credentials',
+          type: 'invalid_request_error',
+          code: 'invalid_api_key'
+        }
+      });
+      expect(mockExecuteClaudeAndStream).not.toHaveBeenCalled();
+
+      await app.close();
+    });
+
+    it('should block request when authentication fails for OpenAI API', async () => {
+      const app = await createTestServer();
+      
+      // Mock authentication to reject with 401
+      mockAuthenticateRequest.mockImplementation(async (_request, reply) => {
+        reply.code(401).send({
+          error: {
+            message: 'Invalid authentication credentials',
+            type: 'invalid_request_error',
+            code: 'invalid_api_key'
+          }
+        });
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          messages: [{ role: 'user', content: 'Test' }],
+          stream: true
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(JSON.parse(response.payload)).toEqual({
+        error: {
+          message: 'Invalid authentication credentials',
+          type: 'invalid_request_error',
+          code: 'invalid_api_key'
+        }
+      });
+      expect(mockExecuteClaudeAndStream).not.toHaveBeenCalled();
+
+      await app.close();
+    });
+
+    it('should process request when authentication passes', async () => {
+      const app = await createTestServer();
+      
+      // Authentication passes by default mock
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/claude',
+        payload: { prompt: 'Test authenticated request' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockAuthenticateRequest).toHaveBeenCalled();
+      expect(mockExecuteClaudeAndStream).toHaveBeenCalledWith(
+        'Test authenticated request',
+        null,
+        {},
+        expect.any(Object)
+      );
 
       await app.close();
     });

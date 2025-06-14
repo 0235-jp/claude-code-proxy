@@ -11,6 +11,7 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.
 ## Features
 
 - **Streaming API**: Real-time Claude Code responses via Server-Sent Events
+- **Authentication**: Optional Bearer token authentication (OpenAI-compatible)
 - **Health Monitoring**: Built-in health check endpoint for system monitoring
 - **Workspace Management**: Isolated workspaces with custom naming or shared workspace
 - **System Prompt Support**: Custom system prompts for both API endpoints
@@ -18,6 +19,7 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.
 - **Session Management**: Resume conversations with Claude Code sessions
 - **OpenAI API Compatible**: Drop-in replacement for OpenAI chat completions
 - **Permission Control**: Fine-grained tool permission management
+- **Structured Logging**: Comprehensive logging with security and performance monitoring
 
 ## Tech Stack
 
@@ -26,6 +28,7 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.
 - **Claude Code CLI** - v1.0.18+ with MCP support
 - **Node.js** - Runtime environment
 - **MCP (Model Context Protocol)** - External data source integration
+- **Pino** - Structured logging
 - **ESLint + Prettier** - Code quality and formatting
 - **GitHub Actions** - CI/CD pipeline
 
@@ -42,6 +45,8 @@ claude-code-server/
 │   ├── session-manager.ts  # Workspace management
 │   ├── mcp-manager.ts      # MCP configuration handling
 │   ├── health-checker.ts   # Health monitoring system
+│   ├── auth.ts            # Authentication middleware
+│   ├── logger.ts          # Unified logging system
 │   └── types.ts            # TypeScript type definitions
 ├── dist/                   # Compiled TypeScript output
 ├── package.json
@@ -234,8 +239,14 @@ WORKSPACE_BASE_PATH=/tmp/claude-workspaces
 | `PROCESS_KILL_TIMEOUT_MS` | `5000` | Timeout before force-killing processes (5 seconds) |
 | `MCP_CONFIG_PATH` | `../mcp-config.json` | Path to MCP configuration file |
 | `WORKSPACE_BASE_PATH` | project root | Base directory for workspace creation |
+| `API_KEY` | (none) | Single API key for authentication (OpenAI-compatible format) |
+| `API_KEYS` | (none) | Multiple API keys (comma-separated, alternative to API_KEY) |
+| `LOG_LEVEL` | `debug` | Logging level (error, warn, info, debug) - defaults to debug for personal use |
+| `NODE_ENV` | `development` | Environment mode (development enables pretty-printed logs when pino-pretty is available) |
 
 ### Usage Examples
+
+#### Development Mode (No Authentication)
 
 **Shared workspace:**
 ```bash
@@ -253,6 +264,41 @@ curl -X POST http://localhost:3000/api/claude \
     "workspace": "my-nodejs-app"
   }'
 ```
+
+**OpenAI-compatible endpoint:**
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-code",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
+  }'
+```
+
+#### Production Mode (With Authentication)
+
+**Shared workspace with API key:**
+```bash
+curl -X POST http://localhost:3000/api/claude \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-1234567890abcdef1234567890abcdef12345678" \
+  -d '{"prompt": "List files"}'
+```
+
+**OpenAI-compatible endpoint with API key:**
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-1234567890abcdef1234567890abcdef12345678" \
+  -d '{
+    "model": "claude-code",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
+  }'
+```
+
+#### Advanced Usage
 
 **With MCP tools:**
 ```bash
@@ -273,6 +319,92 @@ curl -X POST http://localhost:3000/api/claude \
     "system-prompt": "You are a senior software engineer who specializes in modern web development with TypeScript and React."
   }'
 ```
+
+## Authentication
+
+### Overview
+
+Claude Code Server supports optional Bearer token authentication compatible with OpenAI's API format. This allows you to secure your server in production environments while maintaining compatibility with OpenAI client libraries.
+
+### Authentication Modes
+
+- **Development Mode**: No authentication required (default when no API keys are configured)
+- **Production Mode**: Bearer token authentication required when API keys are configured
+
+### API Key Configuration
+
+#### Single API Key
+```bash
+# In .env file
+API_KEY=sk-1234567890abcdef1234567890abcdef12345678
+
+# Or via environment variable
+API_KEY=sk-1234567890abcdef1234567890abcdef12345678 npm start
+```
+
+#### Multiple API Keys
+```bash
+# In .env file
+API_KEYS=sk-key1...,sk-key2...,sk-key3...
+
+# Or via environment variable
+API_KEYS=sk-key1...,sk-key2...,sk-key3... npm start
+```
+
+### Client Usage
+
+When authentication is enabled, include the Authorization header in all requests:
+
+```bash
+# curl example
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+```
+
+### OpenAI Client Library Compatibility
+
+Works seamlessly with OpenAI client libraries:
+
+**Python:**
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-your-api-key-here",
+    base_url="http://localhost:3000/v1"
+)
+
+response = client.chat.completions.create(
+    model="claude-code",
+    messages=[{"role": "user", "content": "Hello"}],
+    stream=True
+)
+```
+
+**Node.js:**
+```javascript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: 'sk-your-api-key-here',
+  baseURL: 'http://localhost:3000/v1'
+});
+
+const response = await client.chat.completions.create({
+  model: 'claude-code',
+  messages: [{ role: 'user', content: 'Hello' }],
+  stream: true
+});
+```
+
+### Security Features
+
+- **Request Logging**: All authentication attempts are logged for security monitoring
+- **API Key Masking**: API keys are masked in logs (only first 8 characters shown)
+- **Structured Logging**: Authentication events are logged with detailed context
+- **Public Health Endpoint**: `/health` endpoint remains public for monitoring systems
 
 ## Installation & Setup
 
@@ -320,8 +452,17 @@ CLAUDE_TOTAL_TIMEOUT_MS=7200000 CLAUDE_INACTIVITY_TIMEOUT_MS=600000 npm start
 # Use custom workspace location
 WORKSPACE_BASE_PATH=/tmp/my-workspaces npm start
 
+# Enable authentication with single API key
+API_KEY=sk-1234567890abcdef1234567890abcdef12345678 npm start
+
+# Enable authentication with multiple API keys
+API_KEYS=sk-key1...,sk-key2...,sk-key3... npm start
+
+# Set logging level (error, warn, info, debug)
+LOG_LEVEL=info npm start
+
 # Combine multiple settings
-PORT=8080 WORKSPACE_BASE_PATH=/tmp/workspaces npm start
+PORT=8080 API_KEY=sk-your-api-key WORKSPACE_BASE_PATH=/tmp/workspaces npm start
 ```
 
 ### Development

@@ -23,8 +23,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Testing the Server
 Test the API endpoints using curl (default port 3000):
+
+#### Without Authentication (Development)
 ```bash
-# Health check endpoint
+# Health check endpoint (always public)
 curl http://localhost:3000/health
 
 # Basic request to /api/claude endpoint
@@ -36,11 +38,29 @@ curl -X POST http://localhost:3000/api/claude \
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+```
 
-# Test with custom port (if PORT environment variable is set)
-curl http://localhost:8080/health
+#### With Authentication (Production)
+```bash
+# Set your API key
+API_KEY="sk-1234567890abcdef1234567890abcdef12345678"
+
+# Basic request to /api/claude endpoint with authentication
+curl -X POST http://localhost:3000/api/claude \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"prompt": "List files"}'
+
+# OpenAI compatible endpoint with authentication
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+
+# Test with custom port
 curl -X POST http://localhost:8080/api/claude \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
   -d '{"prompt": "List files"}'
 ```
 
@@ -104,6 +124,8 @@ The server follows a modular architecture with clear separation of concerns:
 | `PROCESS_KILL_TIMEOUT_MS` | `5000` | Timeout before force-killing processes (5 seconds) |
 | `MCP_CONFIG_PATH` | `../mcp-config.json` | Path to MCP configuration file (relative to dist directory) |
 | `WORKSPACE_BASE_PATH` | project root | Base directory for workspace creation |
+| `API_KEY` | (none) | Single API key for authentication (OpenAI-compatible format) |
+| `API_KEYS` | (none) | Multiple API keys (comma-separated, alternative to API_KEY) |
 | `LOG_LEVEL` | `debug` | Logging level (error, warn, info, debug) - defaults to debug for personal use |
 | `NODE_ENV` | `development` | Environment mode (development enables pretty-printed logs when pino-pretty is available) |
 
@@ -120,6 +142,121 @@ WORKSPACE_BASE_PATH=/tmp/claude-workspaces npm start
 
 # Use custom MCP config location
 MCP_CONFIG_PATH=/path/to/my-mcp-config.json npm start
+
+# Enable authentication with single API key
+API_KEY=sk-1234567890abcdef1234567890abcdef12345678 npm start
+
+# Enable authentication with multiple API keys
+API_KEYS=sk-key1...,sk-key2...,sk-key3... npm start
+```
+
+## Authentication
+
+The server supports optional API key authentication compatible with OpenAI's Bearer token format. This is ideal for securing the server in production environments while maintaining compatibility with OpenAI client libraries.
+
+### Authentication Configuration
+
+Authentication is controlled through environment variables:
+
+- **Development Mode**: No authentication required (default when no API keys are configured)
+- **Production Mode**: Bearer token authentication required when API keys are configured
+
+### API Key Format
+
+API keys should follow the OpenAI format: `sk-` followed by a string of characters (typically 48 characters total).
+
+**Examples:**
+```
+sk-1234567890abcdef1234567890abcdef12345678
+sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890123456
+```
+
+### Single API Key Setup
+
+Set a single API key using the `API_KEY` environment variable:
+
+```bash
+# In .env file
+API_KEY=sk-1234567890abcdef1234567890abcdef12345678
+
+# Or via command line
+API_KEY=sk-1234567890abcdef1234567890abcdef12345678 npm start
+```
+
+### Multiple API Keys Setup
+
+For multiple API keys, use the `API_KEYS` environment variable with comma-separated values:
+
+```bash
+# In .env file
+API_KEYS=sk-key1...,sk-key2...,sk-key3...
+
+# Or via command line
+API_KEYS=sk-key1...,sk-key2...,sk-key3... npm start
+```
+
+### Client Usage
+
+When authentication is enabled, all API requests must include the `Authorization` header:
+
+```bash
+Authorization: Bearer sk-your-api-key-here
+```
+
+### OpenAI Client Library Compatibility
+
+The authentication system is fully compatible with OpenAI client libraries:
+
+```python
+# Python example
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-your-api-key-here",
+    base_url="http://localhost:3000/v1"
+)
+
+response = client.chat.completions.create(
+    model="claude-code",
+    messages=[{"role": "user", "content": "Hello"}],
+    stream=True
+)
+```
+
+```javascript
+// Node.js example
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: 'sk-your-api-key-here',
+  baseURL: 'http://localhost:3000/v1'
+});
+
+const response = await client.chat.completions.create({
+  model: 'claude-code',
+  messages: [{ role: 'user', content: 'Hello' }],
+  stream: true
+});
+```
+
+### Authentication Status
+
+The server logs authentication status on startup:
+
+- **Authentication disabled**: No API keys configured, all requests accepted
+- **Authentication enabled**: API keys configured, Bearer token required
+
+### Security Features
+
+- **Request logging**: All authentication attempts are logged for security monitoring
+- **API key masking**: API keys are masked in logs (only first 8 characters shown)
+- **Structured security logging**: Authentication events are logged with detailed context
+- **Error handling**: Proper HTTP 401 responses for authentication failures
+
+### Health Check Endpoint
+
+The `/health` endpoint is always public and does not require authentication, allowing monitoring systems to check server status without API keys.
+
 ```
 
 ## Logging System

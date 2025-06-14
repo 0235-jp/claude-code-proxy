@@ -9,6 +9,7 @@ import { loadMcpConfig } from './mcp-manager';
 import { performHealthCheck } from './health-checker';
 import { ClaudeApiRequest, OpenAIRequest, StreamJsonData } from './types';
 import { serverLogger, createRequestLogger, PerformanceLogger } from './logger';
+import { authenticateRequest, getAuthStatus } from './auth';
 
 // Configure Fastify with custom logger
 const server = fastify({
@@ -21,15 +22,39 @@ const server = fastify({
  * Initialize and start the Fastify server with API routes
  */
 async function startServer(): Promise<void> {
-  // Log server startup
+  // Log server startup with authentication status
+  const authStatus = getAuthStatus();
   serverLogger.info(
     {
       type: 'server_startup',
       environment: process.env.NODE_ENV || 'development',
       logLevel: process.env.LOG_LEVEL || 'debug',
+      authentication: {
+        enabled: authStatus.enabled,
+        keyCount: authStatus.keyCount,
+      },
     },
     'Starting Claude Code Server'
   );
+
+  // Log authentication configuration
+  if (authStatus.enabled) {
+    serverLogger.info(
+      {
+        type: 'auth_config',
+        keyCount: authStatus.keyCount,
+      },
+      `Authentication enabled with ${authStatus.keyCount} API key(s)`
+    );
+  } else {
+    serverLogger.warn(
+      {
+        type: 'auth_config',
+        sampleKey: authStatus.sampleKey,
+      },
+      'Authentication disabled - API accessible without authentication'
+    );
+  }
 
   await server.register(cors);
 
@@ -81,6 +106,7 @@ async function startServer(): Promise<void> {
   server.post<{ Body: ClaudeApiRequest }>(
     '/api/claude',
     {
+      preHandler: authenticateRequest,
       schema: {
         body: {
           type: 'object',
@@ -176,6 +202,7 @@ async function startServer(): Promise<void> {
   server.post<{ Body: OpenAIRequest }>(
     '/v1/chat/completions',
     {
+      preHandler: authenticateRequest,
       schema: {
         body: {
           type: 'object',
