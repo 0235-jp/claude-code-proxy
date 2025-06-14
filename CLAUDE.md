@@ -104,6 +104,8 @@ The server follows a modular architecture with clear separation of concerns:
 | `PROCESS_KILL_TIMEOUT_MS` | `5000` | Timeout before force-killing processes (5 seconds) |
 | `MCP_CONFIG_PATH` | `../mcp-config.json` | Path to MCP configuration file (relative to dist directory) |
 | `WORKSPACE_BASE_PATH` | project root | Base directory for workspace creation |
+| `LOG_LEVEL` | `debug` | Logging level (error, warn, info, debug) - defaults to debug for personal use |
+| `NODE_ENV` | `development` | Environment mode (development enables pretty-printed logs when pino-pretty is available) |
 
 **Usage Examples:**
 ```bash
@@ -120,7 +122,97 @@ WORKSPACE_BASE_PATH=/tmp/claude-workspaces npm start
 MCP_CONFIG_PATH=/path/to/my-mcp-config.json npm start
 ```
 
+## Logging System
+
+The server uses a unified structured logging system built on Pino for comprehensive monitoring and debugging.
+
+### Logging Features
+
+- **Structured JSON Logging**: All logs are output in structured JSON format for easy parsing and analysis
+- **Request Correlation**: Each request gets a unique correlation ID for tracking across components
+- **Component-based Organization**: Logs are organized by component (server, executor, mcp, health, session)
+- **Performance Logging**: Built-in performance tracking for operations and requests
+- **Security Logging**: Specialized logging for authentication and permission checks
+- **Process Lifecycle Logging**: Detailed tracking of Claude CLI process spawning, execution, and termination
+- **Health Check Logging**: Comprehensive logging for system health monitoring
+- **Pretty Printing**: Human-readable logs in development mode (when pino-pretty is available)
+
+### Log Levels
+
+The server defaults to `debug` level for maximum verbosity (designed for personal use):
+
+- `error`: Errors and failures
+- `warn`: Warnings and degraded conditions  
+- `info`: General information and successful operations
+- `debug`: Detailed debugging information
+
+### Log Configuration
+
+Control logging behavior with environment variables:
+
+```bash
+# Set log level (error, warn, info, debug)
+LOG_LEVEL=info npm start
+
+# Enable production mode (disables pretty printing)
+NODE_ENV=production npm start
+
+# Maximum verbosity (default for personal use)
+LOG_LEVEL=debug NODE_ENV=development npm start
+```
+
+### Log Structure
+
+Each log entry includes:
+
+```json
+{
+  "level": "info",
+  "time": 1749920001794,
+  "pid": 671131,
+  "hostname": "server-name",
+  "component": "server",
+  "type": "server_startup",
+  "correlationId": "uuid-for-request-tracking",
+  "timestamp": "2025-06-14T16:53:21.794Z",
+  "environment": "development",
+  "msg": "Human-readable message",
+  "additionalContext": "varies by log type"
+}
+```
+
+### Monitoring Logs
+
+View logs in real-time:
+
+```bash
+# View background server logs
+npm run logs
+
+# View logs with JSON formatting
+npm run logs | jq
+
+# Filter logs by component
+npm run logs | grep '"component":"health"'
+
+# Filter logs by level
+npm run logs | grep '"level":"error"'
+```
+
+### Log Types
+
+The system logs various event types:
+
+- `server_startup`, `server_ready` - Server lifecycle
+- `api_request`, `api_error` - API request handling
+- `process_spawn`, `process_exit`, `process_error` - Claude CLI process management
+- `health_check`, `health_check_complete` - Health monitoring
+- `config_loaded`, `config_missing` - Configuration management
+- `workspace_created`, `workspace_creation_error` - Workspace management
+- `mcp_config`, `tool_validation` - MCP operations
+
 ### Dependencies
 - Requires Claude Code CLI v1.0.18+ to be installed and configured
-- Uses minimal dependencies: Fastify + CORS plugin
+- Uses minimal dependencies: Fastify + CORS plugin + Pino logging
 - MCP servers must be installed separately (typically via npm)
+- Optional: pino-pretty for development pretty-printing

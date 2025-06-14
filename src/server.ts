@@ -8,13 +8,29 @@ import { executeClaudeAndStream } from './claude-executor';
 import { loadMcpConfig } from './mcp-manager';
 import { performHealthCheck } from './health-checker';
 import { ClaudeApiRequest, OpenAIRequest, StreamJsonData } from './types';
+import { serverLogger, createRequestLogger, PerformanceLogger } from './logger';
 
-const server = fastify({ logger: true });
+// Configure Fastify with custom logger
+const server = fastify({
+  logger: serverLogger,
+  genReqId: () => require('crypto').randomUUID(),
+  requestIdHeader: 'x-request-id',
+});
 
 /**
  * Initialize and start the Fastify server with API routes
  */
 async function startServer(): Promise<void> {
+  // Log server startup
+  serverLogger.info(
+    {
+      type: 'server_startup',
+      environment: process.env.NODE_ENV || 'development',
+      logLevel: process.env.LOG_LEVEL || 'debug',
+    },
+    'Starting Claude Code Server'
+  );
+
   await server.register(cors);
 
   // Load MCP configuration on startup
@@ -91,17 +107,31 @@ async function startServer(): Promise<void> {
       const mcpAllowedTools = request.body['mcp-allowed-tools'];
       const dangerouslySkipPermissions = request.body['dangerously-skip-permissions'];
 
-      // Log incoming request details
-      console.log('=== Claude API Request ===');
-      console.log('Prompt:', prompt);
-      console.log('Session ID:', sessionId || 'new session');
-      console.log('Workspace:', workspace || 'default');
-      console.log('System Prompt:', systemPrompt || 'none specified');
-      console.log('Dangerously skip permissions:', dangerouslySkipPermissions || false);
-      console.log('Allowed tools:', allowedTools || 'none specified');
-      console.log('Disallowed tools:', disallowedTools || 'none specified');
-      console.log('MCP allowed tools:', mcpAllowedTools || 'none specified');
-      console.log('==========================');
+      // Create request-scoped logger
+      const requestLogger = createRequestLogger('claude-api', request.id);
+      const perfLogger = new PerformanceLogger(requestLogger, 'claude-api-request');
+
+      // Log incoming request details with structured logging
+      requestLogger.info(
+        {
+          endpoint: '/api/claude',
+          requestData: {
+            promptLength: prompt?.length || 0,
+            sessionId: sessionId || null,
+            workspace: workspace || 'default',
+            systemPromptLength: systemPrompt?.length || 0,
+            dangerouslySkipPermissions: dangerouslySkipPermissions || false,
+            allowedToolsCount: allowedTools?.length || 0,
+            disallowedToolsCount: disallowedTools?.length || 0,
+            mcpAllowedToolsCount: mcpAllowedTools?.length || 0,
+            allowedTools: allowedTools || [],
+            disallowedTools: disallowedTools || [],
+            mcpAllowedTools: mcpAllowedTools || [],
+          },
+          type: 'api_request',
+        },
+        'Claude API request received'
+      );
 
       reply
         .type('text/event-stream')
@@ -111,19 +141,34 @@ async function startServer(): Promise<void> {
 
       reply.hijack();
 
-      await executeClaudeAndStream(
-        prompt,
-        sessionId || null,
-        {
-          ...(workspace && { workspace }),
-          ...(systemPrompt && { systemPrompt }),
-          ...(dangerouslySkipPermissions !== undefined && { dangerouslySkipPermissions }),
-          ...(allowedTools && { allowedTools }),
-          ...(disallowedTools && { disallowedTools }),
-          ...(mcpAllowedTools && { mcpAllowedTools }),
-        },
-        reply
-      );
+      try {
+        await executeClaudeAndStream(
+          prompt,
+          sessionId || null,
+          {
+            ...(workspace && { workspace }),
+            ...(systemPrompt && { systemPrompt }),
+            ...(dangerouslySkipPermissions !== undefined && { dangerouslySkipPermissions }),
+            ...(allowedTools && { allowedTools }),
+            ...(disallowedTools && { disallowedTools }),
+            ...(mcpAllowedTools && { mcpAllowedTools }),
+          },
+          reply
+        );
+        perfLogger.finish('success');
+      } catch (error) {
+        requestLogger.error(
+          {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            type: 'api_error',
+          },
+          'Claude API request failed'
+        );
+        perfLogger.finish('error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw error;
+      }
     }
   );
 
@@ -259,12 +304,32 @@ async function startServer(): Promise<void> {
         if (!prompt) prompt = userMessage;
       }
 
-      console.log('=== OpenAI Chat API Request ===');
-      console.log('Prompt:', prompt);
-      console.log('Session ID:', session_id || 'new session');
-      console.log('Workspace:', workspace || 'default');
-      console.log('System Prompt:', systemPrompt || 'none specified');
-      console.log('================================');
+      // Create request-scoped logger for OpenAI API
+      const requestLogger = createRequestLogger('openai-api', request.id);
+      const perfLogger = new PerformanceLogger(requestLogger, 'openai-api-request');
+
+      // Log incoming request details with structured logging
+      requestLogger.info(
+        {
+          endpoint: '/v1/chat/completions',
+          requestData: {
+            promptLength: prompt?.length || 0,
+            sessionId: session_id || null,
+            workspace: workspace || 'default',
+            systemPromptLength: systemPrompt?.length || 0,
+            dangerouslySkipPermissions: dangerouslySkipPermissions || false,
+            allowedToolsCount: allowedTools?.length || 0,
+            disallowedToolsCount: disallowedTools?.length || 0,
+            mcpAllowedToolsCount: mcpAllowedTools?.length || 0,
+            messagesCount: messages?.length || 0,
+            allowedTools: allowedTools || [],
+            disallowedTools: disallowedTools || [],
+            mcpAllowedTools: mcpAllowedTools || [],
+          },
+          type: 'api_request',
+        },
+        'OpenAI API request received'
+      );
 
       reply.hijack();
 
@@ -498,7 +563,13 @@ async function startServer(): Promise<void> {
               }
             }
           } catch (e) {
-            console.error('Error processing chunk:', e);
+            requestLogger.error(
+              {
+                error: e instanceof Error ? e.message : 'Unknown error',
+                type: 'stream_processing_error',
+              },
+              'Error processing chunk in OpenAI stream'
+            );
             // Send error to client in proper format
             const errorText = `\n⚠️ Stream processing error: ${(e as Error).message}\n`;
             const chunks = splitIntoChunks(errorText);
@@ -517,29 +588,62 @@ async function startServer(): Promise<void> {
         return (originalEnd as (...args: unknown[]) => unknown).call(reply.raw, ...args);
       };
 
-      await executeClaudeAndStream(
-        prompt,
-        session_id,
-        {
-          ...(workspace && { workspace }),
-          ...(systemPrompt && { systemPrompt }),
-          ...(dangerouslySkipPermissions !== null && { dangerouslySkipPermissions }),
-          ...(allowedTools && { allowedTools }),
-          ...(disallowedTools && { disallowedTools }),
-          ...(mcpAllowedTools && { mcpAllowedTools }),
-        },
-        reply
-      );
+      try {
+        await executeClaudeAndStream(
+          prompt,
+          session_id,
+          {
+            ...(workspace && { workspace }),
+            ...(systemPrompt && { systemPrompt }),
+            ...(dangerouslySkipPermissions !== null && { dangerouslySkipPermissions }),
+            ...(allowedTools && { allowedTools }),
+            ...(disallowedTools && { disallowedTools }),
+            ...(mcpAllowedTools && { mcpAllowedTools }),
+          },
+          reply
+        );
+        perfLogger.finish('success');
+      } catch (error) {
+        requestLogger.error(
+          {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            type: 'api_error',
+          },
+          'OpenAI API request failed'
+        );
+        perfLogger.finish('error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw error;
+      }
     }
   );
 
   try {
-    await server.listen({
-      port: parseInt(process.env.PORT || '3000', 10),
-      host: process.env.HOST || '0.0.0.0',
-    });
+    const port = parseInt(process.env.PORT || '3000', 10);
+    const host = process.env.HOST || '0.0.0.0';
+
+    await server.listen({ port, host });
+
+    serverLogger.info(
+      {
+        type: 'server_ready',
+        serverConfig: {
+          port,
+          host,
+          environment: process.env.NODE_ENV || 'development',
+        },
+      },
+      `Claude Code Server listening on http://${host}:${port}`
+    );
   } catch (err) {
-    server.log.error(err);
+    serverLogger.error(
+      {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        type: 'server_startup_error',
+      },
+      'Failed to start Claude Code Server'
+    );
     process.exit(1);
   }
 }
