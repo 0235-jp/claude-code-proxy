@@ -486,4 +486,9 @@ async function startServer(): Promise<void> {
   }
 }
 
-startServer();
+// Export for testing, only start if not imported
+if (require.main === module) {
+  startServer();
+}
+
+export { server, startServer };

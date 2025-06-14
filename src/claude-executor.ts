@@ -76,9 +76,16 @@ function executeClaudeCommand(
 const activeProcesses = new Set<ChildProcess>();
 
 /**
+ * Get active processes (for testing)
+ */
+export function getActiveProcesses(): Set<ChildProcess> {
+  return activeProcesses;
+}
+
+/**
  * Cleanup function to kill all active processes
  */
-function cleanupActiveProcesses(): void {
+export function cleanupActiveProcesses(): void {
   console.log(`Cleaning up ${activeProcesses.size} active processes`);
   activeProcesses.forEach(proc => {
     if (proc && !proc.killed) {
@@ -99,9 +106,10 @@ function cleanupActiveProcesses(): void {
 /**
  * Setup process signal handlers for graceful shutdown
  */
-function setupSignalHandlers(): void {
-  let handlersSetup = false;
+// Track if signal handlers have been set up to prevent duplicates
+let handlersSetup = false;
 
+export function setupSignalHandlers(): void {
   if (!handlersSetup) {
     process.on('SIGTERM', () => {
       console.log('Received SIGTERM, cleaning up processes...');
@@ -128,7 +136,7 @@ function setupSignalHandlers(): void {
 /**
  * Check for and clean up zombie processes
  */
-function cleanupZombieProcesses(): void {
+export function cleanupZombieProcesses(): void {
   activeProcesses.forEach(proc => {
     if (proc && proc.killed && !proc.exitCode && !proc.signalCode) {
       console.log(`Removing zombie process ${proc.pid} from active list`);
