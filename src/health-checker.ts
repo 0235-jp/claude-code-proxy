@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { getMcpConfig, isMcpEnabled } from './mcp-manager';
+import { healthLogger, logHealthCheck } from './logger';
 
 /**
  * Health check result interface
@@ -271,6 +272,13 @@ export async function getVersion(): Promise<string> {
 export async function performHealthCheck(): Promise<HealthStatus> {
   const timestamp = new Date().toISOString();
 
+  healthLogger.debug(
+    {
+      type: 'health_check_start',
+    },
+    'Starting comprehensive health check'
+  );
+
   // Run all checks in parallel
   const [claudeCli, workspace, mcpConfig, version] = await Promise.all([
     checkClaudeCli(),
@@ -278,6 +286,22 @@ export async function performHealthCheck(): Promise<HealthStatus> {
     checkMcpConfig(),
     getVersion(),
   ]);
+
+  // Log individual check results
+  logHealthCheck('claude-cli', claudeCli.status, {
+    message: claudeCli.message,
+    details: claudeCli.details,
+  });
+
+  logHealthCheck('workspace', workspace.status, {
+    message: workspace.message,
+    details: workspace.details,
+  });
+
+  logHealthCheck('mcp-config', mcpConfig.status, {
+    message: mcpConfig.message,
+    details: mcpConfig.details,
+  });
 
   // Determine overall status
   const checks = { claudeCli, workspace, mcpConfig };
@@ -291,6 +315,22 @@ export async function performHealthCheck(): Promise<HealthStatus> {
   } else {
     overallStatus = 'healthy';
   }
+
+  // Log overall health status
+  healthLogger.info(
+    {
+      overallStatus,
+      checkResults: {
+        claudeCli: claudeCli.status,
+        workspace: workspace.status,
+        mcpConfig: mcpConfig.status,
+      },
+      uptime: getUptime(),
+      version,
+      type: 'health_check_complete',
+    },
+    `Health check completed with status: ${overallStatus}`
+  );
 
   return {
     status: overallStatus,

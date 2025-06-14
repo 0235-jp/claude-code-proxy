@@ -5,7 +5,8 @@
   "dependencies": {
     "@fastify/cors": "^9.x",
     "dotenv": "^16.x",
-    "fastify": "^4.x"
+    "fastify": "^4.x",
+    "pino": "^8.x"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -20,6 +21,7 @@
     "jest": "^30.0.0",
     "lint-staged": "^15.x",
     "nodemon": "^3.x",
+    "pino-pretty": "^10.x",
     "prettier": "^3.x",
     "supertest": "^7.1.1",
     "ts-jest": "^29.4.0",
