@@ -17,5 +17,5 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: moderate
-          allow-dependencies-licenses: GPL-2.0, GPL-3.0, LGPL-2.1, LGPL-3.0, MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
+          allow-licenses: GPL-2.0, GPL-3.0, LGPL-2.1, LGPL-3.0, MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
           deny-packages: 'lodash:4.17.0, lodash:4.17.15' # Example of denying specific vulnerable versions

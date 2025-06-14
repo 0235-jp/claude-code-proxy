@@ -64,7 +64,9 @@ jobs:
           fi
           
           # Use bash arithmetic instead of bc (which is not available in GitHub Actions)
-          if [ "$COVERAGE" -lt "40" ]; then
+          # Extract integer part only for comparison
+          COVERAGE_INT=$(echo "$COVERAGE" | cut -d. -f1)
+          if [ "$COVERAGE_INT" -lt "40" ]; then
             echo "❌ Coverage $COVERAGE% is below minimum threshold of 40%"
             exit 1
           else
