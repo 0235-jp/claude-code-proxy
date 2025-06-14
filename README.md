@@ -47,6 +47,8 @@ claude-code-server/
 ├── .eslintrc.js           # ESLint configuration
 ├── .prettierrc            # Prettier configuration
 ├── .husky/                # Git hooks for code quality
+├── .env                   # Environment variables (gitignored)
+├── .env.example           # Environment variables template
 ├── mcp-config.json        # MCP server configuration (gitignored)
 ├── mcp-config.json.example # MCP configuration template
 ├── shared_workspace/      # Default workspace (gitignored)
@@ -153,6 +155,21 @@ cp mcp-config.json.example mcp-config.json
 1. **Shared Workspace** (default): `shared_workspace/`
 2. **Custom Workspace**: `workspace/{workspace-name}/`
 
+### Configurable Workspace Location
+
+You can customize the base directory for all workspaces using environment variables:
+
+```bash
+# Create .env file
+cp .env.example .env
+
+# Edit .env file
+WORKSPACE_BASE_PATH=/tmp/claude-workspaces
+```
+
+**Environment Variables:**
+- `WORKSPACE_BASE_PATH` - Base directory for workspace creation (default: project root directory)
+
 ### Usage Examples
 
 **Shared workspace:**
@@ -205,6 +222,10 @@ curl -X POST http://localhost:3000/api/claude \
 ```bash
 # Install dependencies
 npm install
+
+# Setup environment variables (optional)
+cp .env.example .env
+# Edit .env with your configuration (e.g., WORKSPACE_BASE_PATH)
 
 # Setup MCP configuration (optional)
 cp mcp-config.json.example mcp-config.json
