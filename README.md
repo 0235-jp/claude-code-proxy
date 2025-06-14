@@ -10,6 +10,7 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.
 
 - **Streaming API**: Real-time Claude Code responses via Server-Sent Events
 - **Workspace Management**: Isolated workspaces with custom naming or shared workspace
+- **System Prompt Support**: Custom system prompts for both API endpoints
 - **MCP Support**: Integration with Model Context Protocol for external tools
 - **Session Management**: Resume conversations with Claude Code sessions
 - **OpenAI API Compatible**: Drop-in replacement for OpenAI chat completions
@@ -48,6 +49,7 @@ claude-code-server/
 | `prompt` | string | The message/instruction for Claude | `"Create a Python script"` |
 | `session_id` | string | Resume existing Claude session | `"9c88687a-61ce-4315-afd5-58b7d84ee68b"` |
 | `workspace` | string | Custom workspace name (default: shared) | `"my-project"` |
+| `systemPrompt` | string | Custom system prompt to set Claude's behavior | `"You are a Python expert"` |
 | `dangerously-skip-permissions` | boolean | Skip tool permission prompts | `true` |
 | `allowedTools` | string[] | Allowed Claude tools | `["Bash", "Edit", "Write"]` |
 | `disallowedTools` | string[] | Disallowed Claude tools | `["WebFetch", "WebSearch"]` |
@@ -63,6 +65,7 @@ claude-code-server/
   "prompt": "Create a Python script",
   "session_id": "9c88687a-61ce-4315-afd5-58b7d84ee68b",
   "workspace": "my-project",
+  "systemPrompt": "You are a Python expert who writes clean, efficient code with proper documentation.",
   "dangerously-skip-permissions": true,
   "allowedTools": ["Bash", "Edit", "Write"],
   "disallowedTools": ["WebFetch"],
@@ -77,6 +80,18 @@ claude-code-server/
 {
   "model": "claude-code",
   "messages": [
+    {"role": "user", "content": "Create a Python web application"}
+  ],
+  "stream": true
+}
+```
+
+**With System Prompt (first message with role "system"):**
+```json
+{
+  "model": "claude-code",
+  "messages": [
+    {"role": "system", "content": "You are a Python expert who writes clean, efficient code with proper documentation."},
     {"role": "user", "content": "Create a Python web application"}
   ],
   "stream": true
@@ -149,6 +164,16 @@ curl -X POST http://localhost:3000/api/claude \
   -d '{
     "prompt": "Analyze the Claude-Code-Server repository",
     "mcp_allowed_tools": ["mcp__github__get_repo", "mcp__deepwiki__ask_question"]
+  }'
+```
+
+**With System Prompt:**
+```bash
+curl -X POST http://localhost:3000/api/claude \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Create a web application",
+    "systemPrompt": "You are a senior software engineer who specializes in modern web development with TypeScript and React."
   }'
 ```
 
