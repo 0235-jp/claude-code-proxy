@@ -17,6 +17,7 @@ async function startServer() {
           prompt: { type: 'string' },
           session_id: { type: 'string' },
           workspace: { type: 'string' },
+          systemPrompt: { type: 'string' },
           'dangerously-skip-permissions': { type: 'boolean' },
           allowedTools: { type: 'array', items: { type: 'string' } },
           disallowedTools: { type: 'array', items: { type: 'string' } },
@@ -25,7 +26,7 @@ async function startServer() {
       }
     }
   }, async (request, reply) => {
-    const { prompt, session_id, workspace, allowedTools, disallowedTools, mcp_allowed_tools } = request.body
+    const { prompt, session_id, workspace, systemPrompt, allowedTools, disallowedTools, mcp_allowed_tools } = request.body
     const dangerouslySkipPermissions = request.body['dangerously-skip-permissions']
 
     // Log incoming request details
@@ -33,6 +34,7 @@ async function startServer() {
     console.log('Prompt:', prompt)
     console.log('Session ID:', session_id || 'new session')
     console.log('Workspace:', workspace || 'default')
+    console.log('System Prompt:', systemPrompt || 'none specified')
     console.log('Dangerously skip permissions:', dangerouslySkipPermissions || false)
     console.log('Allowed tools:', allowedTools || 'none specified')
     console.log('Disallowed tools:', disallowedTools || 'none specified')
@@ -46,7 +48,7 @@ async function startServer() {
 
     reply.hijack()
     
-    await executeClaudeAndStream(prompt, session_id, { workspace, dangerouslySkipPermissions, allowedTools, disallowedTools, mcpAllowedTools: mcp_allowed_tools }, reply)
+    await executeClaudeAndStream(prompt, session_id, { workspace, systemPrompt, dangerouslySkipPermissions, allowedTools, disallowedTools, mcpAllowedTools: mcp_allowed_tools }, reply)
   })
 
   // OpenAI Chat API compatible endpoint
@@ -81,6 +83,14 @@ async function startServer() {
       return
     }
 
+    // Extract system prompt if the first message has role "system"
+    let systemPrompt = null
+    let messageStartIndex = 0
+    if (messages.length > 0 && messages[0].role === 'system') {
+      systemPrompt = messages[0].content
+      messageStartIndex = 1
+    }
+
     // Get the latest user message
     const userMessage = messages[messages.length - 1]?.content || ''
     
@@ -92,7 +102,7 @@ async function startServer() {
     let prev_disallowedTools = null
     let prev_mcpAllowedTools = null
     
-    for (let i = messages.length - 2; i >= 0; i--) {
+    for (let i = messages.length - 2; i >= messageStartIndex; i--) {
       if (messages[i].role === 'assistant') {
         const content = messages[i].content || ''
         
@@ -165,6 +175,7 @@ async function startServer() {
     console.log('Prompt:', prompt)
     console.log('Session ID:', session_id || 'new session')
     console.log('Workspace:', workspace || 'default')
+    console.log('System Prompt:', systemPrompt || 'none specified')
     console.log('================================')
     
     reply.hijack()
@@ -396,7 +407,7 @@ async function startServer() {
       originalEnd.call(reply.raw)
     }
     
-    await executeClaudeAndStream(prompt, session_id, { workspace, dangerouslySkipPermissions, allowedTools, disallowedTools, mcpAllowedTools }, reply)
+    await executeClaudeAndStream(prompt, session_id, { workspace, systemPrompt, dangerouslySkipPermissions, allowedTools, disallowedTools, mcpAllowedTools }, reply)
   })
 
   try {
