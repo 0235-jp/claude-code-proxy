@@ -15,30 +15,35 @@ async function startServer() {
         required: ['prompt'],
         properties: {
           prompt: { type: 'string' },
-          session_id: { type: 'string' },
+          'session-id': { type: 'string' },
           workspace: { type: 'string' },
-          systemPrompt: { type: 'string' },
+          'system-prompt': { type: 'string' },
           'dangerously-skip-permissions': { type: 'boolean' },
-          allowedTools: { type: 'array', items: { type: 'string' } },
-          disallowedTools: { type: 'array', items: { type: 'string' } },
-          mcp_allowed_tools: { type: 'array', items: { type: 'string' } }
+          'allowed-tools': { type: 'array', items: { type: 'string' } },
+          'disallowed-tools': { type: 'array', items: { type: 'string' } },
+          'mcp-allowed-tools': { type: 'array', items: { type: 'string' } }
         }
       }
     }
   }, async (request, reply) => {
-    const { prompt, session_id, workspace, systemPrompt, allowedTools, disallowedTools, mcp_allowed_tools } = request.body
+    const { prompt, workspace } = request.body
+    const sessionId = request.body['session-id']
+    const systemPrompt = request.body['system-prompt']
+    const allowedTools = request.body['allowed-tools']
+    const disallowedTools = request.body['disallowed-tools']
+    const mcpAllowedTools = request.body['mcp-allowed-tools']
     const dangerouslySkipPermissions = request.body['dangerously-skip-permissions']
 
     // Log incoming request details
     console.log('=== Claude API Request ===')
     console.log('Prompt:', prompt)
-    console.log('Session ID:', session_id || 'new session')
+    console.log('Session ID:', sessionId || 'new session')
     console.log('Workspace:', workspace || 'default')
     console.log('System Prompt:', systemPrompt || 'none specified')
     console.log('Dangerously skip permissions:', dangerouslySkipPermissions || false)
     console.log('Allowed tools:', allowedTools || 'none specified')
     console.log('Disallowed tools:', disallowedTools || 'none specified')
-    console.log('MCP allowed tools:', mcp_allowed_tools || 'none specified')
+    console.log('MCP allowed tools:', mcpAllowedTools || 'none specified')
     console.log('==========================')
 
     reply.type('text/event-stream')
@@ -48,7 +53,7 @@ async function startServer() {
 
     reply.hijack()
     
-    await executeClaudeAndStream(prompt, session_id, { workspace, systemPrompt, dangerouslySkipPermissions, allowedTools, disallowedTools, mcpAllowedTools: mcp_allowed_tools }, reply)
+    await executeClaudeAndStream(prompt, sessionId, { workspace, systemPrompt, dangerouslySkipPermissions, allowedTools, disallowedTools, mcpAllowedTools }, reply)
   })
 
   // OpenAI Chat API compatible endpoint
@@ -106,7 +111,7 @@ async function startServer() {
       if (messages[i].role === 'assistant') {
         const content = messages[i].content || ''
         
-        const sessionMatch = content.match(/session_id=([a-f0-9-]+)/)
+        const sessionMatch = content.match(/session-id=([a-f0-9-]+)/)
         if (sessionMatch) session_id = sessionMatch[1]
         
         const workspaceMatch = content.match(/workspace=([^\s\n]+)/)
@@ -115,17 +120,17 @@ async function startServer() {
         const dangerMatch = content.match(/dangerously-skip-permissions=(\w+)/)
         if (dangerMatch) prev_dangerously_skip_permissions = dangerMatch[1].toLowerCase() === 'true'
         
-        const allowedMatch = content.match(/allowedTools=\[([^\]]+)\]/)
+        const allowedMatch = content.match(/allowed-tools=\[([^\]]+)\]/)
         if (allowedMatch) {
           prev_allowedTools = allowedMatch[1].split(',').map(tool => tool.trim().replace(/['"]/g, ''))
         }
         
-        const disallowedMatch = content.match(/disallowedTools=\[([^\]]+)\]/)
+        const disallowedMatch = content.match(/disallowed-tools=\[([^\]]+)\]/)
         if (disallowedMatch) {
           prev_disallowedTools = disallowedMatch[1].split(',').map(tool => tool.trim().replace(/['"]/g, ''))
         }
         
-        const mcpAllowedMatch = content.match(/mcpAllowedTools=\[([^\]]+)\]/)
+        const mcpAllowedMatch = content.match(/mcp-allowed-tools=\[([^\]]+)\]/)
         if (mcpAllowedMatch) {
           prev_mcpAllowedTools = mcpAllowedMatch[1].split(',').map(tool => tool.trim().replace(/['"]/g, ''))
         }
@@ -142,17 +147,17 @@ async function startServer() {
       dangerMatch[1].toLowerCase() === 'true' : 
       prev_dangerously_skip_permissions
     
-    const allowedMatch = userMessage.match(/allowedTools=\[([^\]]+)\]/)
+    const allowedMatch = userMessage.match(/allowed-tools=\[([^\]]+)\]/)
     const allowedTools = allowedMatch ? 
       allowedMatch[1].split(',').map(tool => tool.trim().replace(/['"]/g, '')) :
       prev_allowedTools
     
-    const disallowedMatch = userMessage.match(/disallowedTools=\[([^\]]+)\]/)
+    const disallowedMatch = userMessage.match(/disallowed-tools=\[([^\]]+)\]/)
     const disallowedTools = disallowedMatch ?
       disallowedMatch[1].split(',').map(tool => tool.trim().replace(/['"]/g, '')) :
       prev_disallowedTools
     
-    const mcpAllowedMatch = userMessage.match(/mcpAllowedTools=\[([^\]]+)\]/)
+    const mcpAllowedMatch = userMessage.match(/mcp-allowed-tools=\[([^\]]+)\]/)
     const mcpAllowedTools = mcpAllowedMatch ?
       mcpAllowedMatch[1].split(',').map(tool => tool.trim().replace(/['"]/g, '')) :
       prev_mcpAllowedTools
@@ -165,7 +170,7 @@ async function startServer() {
     } else {
       // Remove settings from message
       prompt = userMessage.replace(
-        /(workspace=[^\s\n]+|dangerously-skip-permissions=\w+|allowedTools=\[[^\]]+\]|disallowedTools=\[[^\]]+\]|mcpAllowedTools=\[[^\]]+\]|prompt="[^"]+"|prompt=)(\s*)/g, 
+        /(workspace=[^\s\n]+|dangerously-skip-permissions=\w+|allowed-tools=\[[^\]]+\]|disallowed-tools=\[[^\]]+\]|mcp-allowed-tools=\[[^\]]+\]|prompt="[^"]+"|prompt=)(\s*)/g, 
         ''
       ).trim()
       if (!prompt) prompt = userMessage
@@ -239,7 +244,7 @@ async function startServer() {
               sessionPrinted = true
               
               // Build session info content
-              let sessionInfo = `session_id=${sessionId}\n`
+              let sessionInfo = `session-id=${sessionId}\n`
               if (workspace) {
                 sessionInfo += `workspace=${workspace}\n`
               }
@@ -248,15 +253,15 @@ async function startServer() {
               }
               if (allowedTools) {
                 const toolsStr = allowedTools.map(tool => `"${tool}"`).join(',')
-                sessionInfo += `allowedTools=[${toolsStr}]\n`
+                sessionInfo += `allowed-tools=[${toolsStr}]\n`
               }
               if (disallowedTools) {
                 const toolsStr = disallowedTools.map(tool => `"${tool}"`).join(',')
-                sessionInfo += `disallowedTools=[${toolsStr}]\n`
+                sessionInfo += `disallowed-tools=[${toolsStr}]\n`
               }
               if (mcpAllowedTools) {
                 const toolsStr = mcpAllowedTools.map(tool => `"${tool}"`).join(',')
-                sessionInfo += `mcpAllowedTools=[${toolsStr}]\n`
+                sessionInfo += `mcp-allowed-tools=[${toolsStr}]\n`
               }
               sessionInfo += '<thinking>\n'
               inThinking = true
