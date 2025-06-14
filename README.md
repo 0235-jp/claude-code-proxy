@@ -47,13 +47,13 @@ claude-code-server/
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `prompt` | string | The message/instruction for Claude | `"Create a Python script"` |
-| `session_id` | string | Resume existing Claude session | `"9c88687a-61ce-4315-afd5-58b7d84ee68b"` |
+| `session-id` | string | Resume existing Claude session | `"9c88687a-61ce-4315-afd5-58b7d84ee68b"` |
 | `workspace` | string | Custom workspace name (default: shared) | `"my-project"` |
-| `systemPrompt` | string | Custom system prompt to set Claude's behavior | `"You are a Python expert"` |
+| `system-prompt` | string | Custom system prompt to set Claude's behavior | `"You are a Python expert"` |
 | `dangerously-skip-permissions` | boolean | Skip tool permission prompts | `true` |
-| `allowedTools` | string[] | Allowed Claude tools | `["Bash", "Edit", "Write"]` |
-| `disallowedTools` | string[] | Disallowed Claude tools | `["WebFetch", "WebSearch"]` |
-| `mcp_allowed_tools` | string[] | Allowed MCP tools | `["mcp__github__get_repo"]` |
+| `allowed-tools` | string[] | Allowed Claude tools | `["Bash", "Edit", "Write"]` |
+| `disallowed-tools` | string[] | Disallowed Claude tools | `["WebFetch", "WebSearch"]` |
+| `mcp-allowed-tools` | string[] | Allowed MCP tools | `["mcp__github__get_repo"]` |
 
 ## API Endpoints
 
@@ -63,13 +63,13 @@ claude-code-server/
 ```json
 {
   "prompt": "Create a Python script",
-  "session_id": "9c88687a-61ce-4315-afd5-58b7d84ee68b",
+  "session-id": "9c88687a-61ce-4315-afd5-58b7d84ee68b",
   "workspace": "my-project",
-  "systemPrompt": "You are a Python expert who writes clean, efficient code with proper documentation.",
+  "system-prompt": "You are a Python expert who writes clean, efficient code with proper documentation.",
   "dangerously-skip-permissions": true,
-  "allowedTools": ["Bash", "Edit", "Write"],
-  "disallowedTools": ["WebFetch"],
-  "mcp_allowed_tools": ["mcp__github__get_repo"]
+  "allowed-tools": ["Bash", "Edit", "Write"],
+  "disallowed-tools": ["WebFetch"],
+  "mcp-allowed-tools": ["mcp__github__get_repo"]
 }
 ```
 
@@ -100,13 +100,13 @@ claude-code-server/
 
 **To set parameters in the OpenAI API, use the following content:**
 
-The session_id is automatically read from the previous response.
+The session-id is automatically read from the previous response.
 Other parameters will inherit information from the previous response unless specified.
 
 ```
 workspace=project-name
-allowedTools=["Bash","Edit","Write"]
-mcp_allowed_tools=["mcp__github__get_repo"]
+allowed-tools=["Bash","Edit","Write"]
+mcp-allowed-tools=["mcp__github__get_repo"]
 dangerously-skip-permissions=true
 
 Your actual prompt here
@@ -163,7 +163,7 @@ curl -X POST http://localhost:3000/api/claude \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Analyze the Claude-Code-Server repository",
-    "mcp_allowed_tools": ["mcp__github__get_repo", "mcp__deepwiki__ask_question"]
+    "mcp-allowed-tools": ["mcp__github__get_repo", "mcp__deepwiki__ask_question"]
   }'
 ```
 
@@ -173,7 +173,7 @@ curl -X POST http://localhost:3000/api/claude \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Create a web application",
-    "systemPrompt": "You are a senior software engineer who specializes in modern web development with TypeScript and React."
+    "system-prompt": "You are a senior software engineer who specializes in modern web development with TypeScript and React."
   }'
 ```
 
