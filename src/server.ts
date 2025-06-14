@@ -6,6 +6,7 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import { executeClaudeAndStream } from './claude-executor';
 import { loadMcpConfig } from './mcp-manager';
+import { performHealthCheck } from './health-checker';
 import { ClaudeApiRequest, OpenAIRequest, StreamJsonData } from './types';
 
 const server = fastify({ logger: true });
@@ -18,6 +19,48 @@ async function startServer(): Promise<void> {
 
   // Load MCP configuration on startup
   await loadMcpConfig();
+
+  // Health check endpoint
+  server.get('/health', async (_request, reply) => {
+    try {
+      const healthStatus = await performHealthCheck();
+
+      // Set appropriate HTTP status code based on health
+      let statusCode = 200;
+      if (healthStatus.status === 'degraded') {
+        statusCode = 200; // Still operational but with issues
+      } else if (healthStatus.status === 'unhealthy') {
+        statusCode = 503; // Service unavailable
+      }
+
+      reply.code(statusCode).send(healthStatus);
+    } catch (error) {
+      reply.code(500).send({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Unknown error',
+        uptime: process.uptime(),
+        version: 'unknown',
+        checks: {
+          claudeCli: {
+            status: 'unhealthy',
+            message: 'Health check failed',
+            timestamp: new Date().toISOString(),
+          },
+          workspace: {
+            status: 'unhealthy',
+            message: 'Health check failed',
+            timestamp: new Date().toISOString(),
+          },
+          mcpConfig: {
+            status: 'unhealthy',
+            message: 'Health check failed',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    }
+  });
 
   server.post<{ Body: ClaudeApiRequest }>(
     '/api/claude',

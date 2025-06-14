@@ -11,6 +11,7 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.
 ## Features
 
 - **Streaming API**: Real-time Claude Code responses via Server-Sent Events
+- **Health Monitoring**: Built-in health check endpoint for system monitoring
 - **Workspace Management**: Isolated workspaces with custom naming or shared workspace
 - **System Prompt Support**: Custom system prompts for both API endpoints
 - **MCP Support**: Integration with Model Context Protocol for external tools
@@ -36,10 +37,11 @@ claude-code-server/
 │   └── workflows/
 │       └── ci.yml          # GitHub Actions CI/CD workflow
 ├── src/
-│   ├── server.ts           # Fastify server with dual API endpoints
+│   ├── server.ts           # Fastify server with API endpoints
 │   ├── claude-executor.ts  # Claude Code execution with MCP support
 │   ├── session-manager.ts  # Workspace management
 │   ├── mcp-manager.ts      # MCP configuration handling
+│   ├── health-checker.ts   # Health monitoring system
 │   └── types.ts            # TypeScript type definitions
 ├── dist/                   # Compiled TypeScript output
 ├── package.json
@@ -73,6 +75,60 @@ claude-code-server/
 | `mcp-allowed-tools` | string[] | Allowed MCP tools | `["mcp__github__get_repo"]` |
 
 ## API Endpoints
+
+### GET /health
+
+Health check endpoint for monitoring server status.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-06-14T16:25:58.963Z",
+  "uptime": 129.465,
+  "version": "1.0.0",
+  "checks": {
+    "claudeCli": {
+      "status": "healthy",
+      "message": "Claude CLI is available and responsive",
+      "details": {
+        "version": "1.0.24 (Claude Code)",
+        "exitCode": 0
+      },
+      "timestamp": "2025-06-14T16:25:58.963Z"
+    },
+    "workspace": {
+      "status": "healthy",
+      "message": "Workspace directory is accessible and writable",
+      "details": {
+        "path": "/path/to/workspace",
+        "readable": true,
+        "writable": true
+      },
+      "timestamp": "2025-06-14T16:25:58.965Z"
+    },
+    "mcpConfig": {
+      "status": "healthy",
+      "message": "MCP is disabled (no configuration file found)",
+      "details": {
+        "enabled": false,
+        "configPath": "/path/to/mcp-config.json"
+      },
+      "timestamp": "2025-06-14T16:25:58.965Z"
+    }
+  }
+}
+```
+
+**Status Codes:**
+- `200` - Healthy or degraded (still operational)
+- `503` - Unhealthy (service unavailable)
+- `500` - Internal server error
+
+**Health Status Values:**
+- `healthy` - All checks passed
+- `degraded` - Some issues detected but still operational
+- `unhealthy` - Critical issues detected, service may not work properly
 
 ### POST /api/claude
 

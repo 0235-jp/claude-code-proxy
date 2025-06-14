@@ -24,6 +24,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Testing the Server
 Test the API endpoints using curl (default port 3000):
 ```bash
+# Health check endpoint
+curl http://localhost:3000/health
+
 # Basic request to /api/claude endpoint
 curl -X POST http://localhost:3000/api/claude \
   -H "Content-Type: application/json" \
@@ -35,6 +38,7 @@ curl -X POST http://localhost:3000/v1/chat/completions \
   -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
 
 # Test with custom port (if PORT environment variable is set)
+curl http://localhost:8080/health
 curl -X POST http://localhost:8080/api/claude \
   -H "Content-Type: application/json" \
   -d '{"prompt": "List files"}'
@@ -45,7 +49,8 @@ curl -X POST http://localhost:8080/api/claude \
 ### Core Components
 The server follows a modular architecture with clear separation of concerns:
 
-1. **server.js** - Main Fastify server with two API endpoints:
+1. **server.js** - Main Fastify server with three API endpoints:
+   - `/health` - Health check endpoint for monitoring server status
    - `/api/claude` - Direct Claude Code API with all parameters in request body
    - `/v1/chat/completions` - OpenAI-compatible streaming endpoint
 
@@ -62,6 +67,12 @@ The server follows a modular architecture with clear separation of concerns:
    - Loads `mcp-config.json` configuration at startup
    - Validates MCP tool names against configured servers
    - Enables external tool integration (e.g., GitHub, DeepWiki)
+
+5. **health-checker.js** - Health monitoring system:
+   - Checks Claude CLI availability and version
+   - Verifies workspace directory accessibility and permissions
+   - Monitors MCP configuration status
+   - Provides comprehensive system health reporting
 
 ### Key Architecture Patterns
 
