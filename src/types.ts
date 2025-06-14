@@ -36,7 +36,7 @@ export interface OpenAIRequest {
 }
 
 export interface McpConfig {
-  mcpServers: Record<string, any>;
+  mcpServers: Record<string, unknown>;
 }
 
 export interface SessionInfo {
@@ -58,7 +58,9 @@ export interface StreamJsonData {
       text?: string;
       thinking?: string;
       name?: string;
-      input?: any;
+      input?: unknown;
+      content?: string;
+      is_error?: boolean;
     }>;
     stop_reason?: string;
   };

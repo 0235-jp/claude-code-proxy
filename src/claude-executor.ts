@@ -18,7 +18,7 @@ import { FastifyReply } from 'fastify';
  * @returns Spawned Claude process
  */
 function executeClaudeCommand(
-  prompt: string,
+  _prompt: string,
   claudeSessionId: string | null,
   workspacePath: string,
   options: ClaudeOptions = {}
@@ -42,7 +42,7 @@ function executeClaudeCommand(
   if (options.allowedTools && options.allowedTools.length > 0) {
     allAllowedTools = [...options.allowedTools];
   }
-  
+
   // Add MCP configuration if enabled and tools are requested
   if (isMcpEnabled() && options.mcpAllowedTools && options.mcpAllowedTools.length > 0) {
     const validMcpTools = validateMcpTools(options.mcpAllowedTools);
@@ -53,7 +53,7 @@ function executeClaudeCommand(
       console.log('MCP enabled with tools:', validMcpTools);
     }
   }
-  
+
   // Add combined allowed tools if any
   if (allAllowedTools.length > 0) {
     args.push('--allowedTools', allAllowedTools.join(','));
@@ -66,7 +66,7 @@ function executeClaudeCommand(
   return spawn('claude', args, {
     cwd: workspacePath,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env }
+    env: { ...process.env },
   });
 }
 
@@ -84,7 +84,7 @@ export async function executeClaudeAndStream(
   reply: FastifyReply
 ): Promise<void> {
   let workspacePath: string;
-  
+
   if (options.workspace) {
     workspacePath = await createWorkspace(options.workspace);
   } else if (claudeSessionId) {
@@ -95,7 +95,7 @@ export async function executeClaudeAndStream(
 
   console.log(`Executing Claude in workspace: ${workspacePath}`);
   console.log(`Options:`, options);
-  
+
   // Log MCP status
   if (isMcpEnabled()) {
     const mcpConfig = getMcpConfig();
@@ -109,7 +109,7 @@ export async function executeClaudeAndStream(
   }
 
   const timeoutMs = 3600000; // 1 hour
-  console.log(`Total timeout set to: ${timeoutMs}ms (${timeoutMs/60000} minutes)`);
+  console.log(`Total timeout set to: ${timeoutMs}ms (${timeoutMs / 60000} minutes)`);
 
   const claudeProcess = executeClaudeCommand(prompt, claudeSessionId, workspacePath, options);
 
@@ -122,29 +122,33 @@ export async function executeClaudeAndStream(
   const totalTimeout = setTimeout(() => {
     console.log('Claude process total timeout - killing process');
     claudeProcess.kill('SIGTERM');
-    reply.raw.write(`data: ${JSON.stringify({
-      type: "result",
-      subtype: "timeout",
-      is_error: true,
-      result: `Total timeout (${timeoutMs/60000} minutes)`,
-      session_id: claudeSessionId || null
-    })}\n\n`);
+    reply.raw.write(
+      `data: ${JSON.stringify({
+        type: 'result',
+        subtype: 'timeout',
+        is_error: true,
+        result: `Total timeout (${timeoutMs / 60000} minutes)`,
+        session_id: claudeSessionId || null,
+      })}\n\n`
+    );
     reply.raw.end();
   }, timeoutMs);
 
   let inactivityTimeout: NodeJS.Timeout;
-  const resetInactivityTimeout = () => {
+  const resetInactivityTimeout = (): void => {
     if (inactivityTimeout) clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       console.log('Claude process inactivity timeout - killing process');
       claudeProcess.kill('SIGTERM');
-      reply.raw.write(`data: ${JSON.stringify({
-        type: "result",
-        subtype: "timeout",
-        is_error: true,
-        result: "Inactivity timeout (5 minutes since last output)",
-        session_id: claudeSessionId || null
-      })}\n\n`);
+      reply.raw.write(
+        `data: ${JSON.stringify({
+          type: 'result',
+          subtype: 'timeout',
+          is_error: true,
+          result: 'Inactivity timeout (5 minutes since last output)',
+          session_id: claudeSessionId || null,
+        })}\n\n`
+      );
       reply.raw.end();
     }, 300000);
   };
@@ -153,8 +157,11 @@ export async function executeClaudeAndStream(
   claudeProcess.stdout?.on('data', async (data: Buffer) => {
     console.log('Claude stdout:', data.toString());
     resetInactivityTimeout();
-    
-    const lines = data.toString().split('\n').filter(line => line.trim());
+
+    const lines = data
+      .toString()
+      .split('\n')
+      .filter(line => line.trim());
 
     for (const line of lines) {
       try {
@@ -165,7 +172,6 @@ export async function executeClaudeAndStream(
         }
 
         reply.raw.write(`data: ${line}\n\n`);
-        if (reply.raw.flush) reply.raw.flush();
       } catch (e) {
         console.log('Non-JSON line:', line);
       }
@@ -187,13 +193,15 @@ export async function executeClaudeAndStream(
     console.error('Claude process error:', error);
     clearTimeout(totalTimeout);
     if (inactivityTimeout) clearTimeout(inactivityTimeout);
-    reply.raw.write(`data: ${JSON.stringify({
-      type: "result",
-      subtype: "error",
-      is_error: true,
-      result: error.message,
-      session_id: claudeSessionId || null
-    })}\n\n`);
+    reply.raw.write(
+      `data: ${JSON.stringify({
+        type: 'result',
+        subtype: 'error',
+        is_error: true,
+        result: error.message,
+        session_id: claudeSessionId || null,
+      })}\n\n`
+    );
     reply.raw.end();
   });
 }
