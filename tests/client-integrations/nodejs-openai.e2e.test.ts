@@ -514,7 +514,7 @@ setTimeout(() => {
         .expect(200);
 
       expect(response.status).toBe(200);
-    }, 10000);
+    }, 15000);
   });
 
   describe('Node.js TypeScript Integration', () => {

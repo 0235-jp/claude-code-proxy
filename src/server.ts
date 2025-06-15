@@ -295,7 +295,13 @@ async function startServer(): Promise<void> {
       const { messages, stream = true } = request.body;
 
       if (!stream) {
-        reply.code(400).send({ error: 'Only streaming is supported' });
+        reply.code(400).send({
+          error: {
+            message: 'Only streaming is supported',
+            type: 'invalid_request_error',
+            code: 'streaming_required',
+          },
+        });
         return;
       }
 
