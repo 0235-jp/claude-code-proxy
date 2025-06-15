@@ -625,6 +625,41 @@ async function startServer(): Promise<void> {
                   }
                 }
               }
+            } else if (jsonData.type === 'result' && jsonData.subtype === 'success') {
+              // Close thinking block if still open
+              if (inThinking) {
+                sendChunk('\n</thinking>\n');
+                inThinking = false;
+              }
+
+              // Send final chunk with stop reason to properly end the stream
+              const finalChunk = {
+                id: messageId,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: 'claude-code',
+                system_fingerprint: systemFingerprint,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {},
+                    logprobs: null,
+                    finish_reason: 'stop',
+                  },
+                ],
+              };
+              (originalWrite as (chunk: Buffer | string) => boolean).call(
+                reply.raw,
+                `data: ${JSON.stringify(finalChunk)}\n\n`
+              );
+
+              // End the stream
+              (originalWrite as (chunk: Buffer | string) => boolean).call(
+                reply.raw,
+                'data: [DONE]\n\n'
+              );
+              reply.raw.end();
+              return true;
             } else if (jsonData.type === 'error') {
               if (inThinking) {
                 sendChunk('\n</thinking>\n');
