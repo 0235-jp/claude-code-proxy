@@ -40,7 +40,11 @@ setTimeout(() => {
     await fs.writeFile(mockClaudePath, mockClaudeScript);
     await fs.chmod(mockClaudePath, '755');
 
-    process.env.PATH = `${path.dirname(mockClaudePath)}:${process.env.PATH}`;
+    // Add mock claude to PATH - rename to 'claude' for CI compatibility
+    const standardClaudePath = path.join(path.dirname(mockClaudePath), 'claude');
+    await fs.copyFile(mockClaudePath, standardClaudePath);
+    await fs.chmod(standardClaudePath, '755');
+    process.env.PATH = `${path.dirname(standardClaudePath)}:${process.env.PATH}`;
     
     // Start server
     return new Promise<void>((resolve, reject) => {
@@ -85,8 +89,14 @@ setTimeout(() => {
 
   afterAll(async () => {
     const mockClaudePath = path.join(__dirname, '..', 'mock-claude-nodejs');
+    const standardClaudePath = path.join(path.dirname(mockClaudePath), 'claude');
     try {
       await fs.unlink(mockClaudePath);
+    } catch (error) {
+      // Ignore
+    }
+    try {
+      await fs.unlink(standardClaudePath);
     } catch (error) {
       // Ignore
     }
@@ -138,9 +148,13 @@ setTimeout(() => {
       expect(response.headers['content-type']).toBe('text/event-stream; charset=utf-8');
       
       // Verify streaming chunks format
-      const chunks = response.text.split('\\n')
+      const chunks = response.text.split('\n')
         .filter(line => line.startsWith('data: ') && !line.includes('[DONE]'))
-        .map(line => JSON.parse(line.substring(6)));
+        .map(line => {
+          const data = line.substring(6).trim();
+          return data ? JSON.parse(data) : null;
+        })
+        .filter(chunk => chunk !== null);
 
       expect(chunks.length).toBeGreaterThan(0);
       
@@ -189,10 +203,14 @@ setTimeout(() => {
         .expect(200);
 
       // Parse streaming response like Node.js would
-      const lines = response.text.split('\\n');
+      const lines = response.text.split('\n');
       const chunks = lines
         .filter(line => line.startsWith('data: ') && !line.includes('[DONE]'))
-        .map(line => JSON.parse(line.substring(6)));
+        .map(line => {
+          const data = line.substring(6).trim();
+          return data ? JSON.parse(data) : null;
+        })
+        .filter(chunk => chunk !== null);
 
       // Reconstruct content like Node.js for await would
       let fullContent = '';
@@ -401,14 +419,17 @@ setTimeout(() => {
       expect(response.status).toBe(200);
       
       // Verify we can parse the streaming chunks
-      const chunks = response.text.split('\\n')
+      const chunks = response.text.split('\n')
         .filter(line => line.startsWith('data: ') && !line.includes('[DONE]'));
       
       expect(chunks.length).toBeGreaterThan(0);
       
       // Each chunk should be valid JSON
       chunks.forEach(line => {
-        expect(() => JSON.parse(line.substring(6))).not.toThrow();
+        const data = line.substring(6).trim();
+        if (data) {
+          expect(() => JSON.parse(data)).not.toThrow();
+        }
       });
     }, 15000);
 

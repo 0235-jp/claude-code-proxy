@@ -8,13 +8,6 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 
 // Mock OpenAI client library behavior
-interface MockOpenAIClient {
-  chat: {
-    completions: {
-      create: (params: any) => Promise<any>;
-    };
-  };
-}
 
 describe('OpenAI API Compatibility E2E Tests', () => {
   let serverProcess: ChildProcess;
@@ -101,9 +94,11 @@ setTimeout(() => {
     await fs.writeFile(mockClaudePath, mockClaudeScript);
     await fs.chmod(mockClaudePath, '755');
 
-    // Add mock claude to PATH
-    process.env.PATH = `${path.dirname(mockClaudePath)}:${process.env.PATH}`;
-    process.env.CLAUDE_CLI_PATH = mockClaudePath;
+    // Add mock claude to PATH - rename to 'claude' for CI compatibility
+    const standardClaudePath = path.join(__dirname, 'claude');
+    await fs.copyFile(mockClaudePath, standardClaudePath);
+    await fs.chmod(standardClaudePath, '755');
+    process.env.PATH = `${path.dirname(standardClaudePath)}:${process.env.PATH}`;
     
     // Start the server
     return new Promise<void>((resolve, reject) => {
@@ -153,10 +148,16 @@ setTimeout(() => {
   }, 20000);
 
   afterAll(async () => {
-    // Clean up mock claude
+    // Clean up mock claude files
     const mockClaudePath = path.join(__dirname, 'mock-claude-openai');
+    const standardClaudePath = path.join(__dirname, 'claude');
     try {
       await fs.unlink(mockClaudePath);
+    } catch (error) {
+      // Ignore
+    }
+    try {
+      await fs.unlink(standardClaudePath);
     } catch (error) {
       // Ignore
     }
@@ -202,14 +203,14 @@ setTimeout(() => {
       expect(response.headers['connection']).toBe('keep-alive');
       
       // Verify SSE data format
-      const lines = response.text.split('\\n');
+      const lines = response.text.split('\n');
       const dataLines = lines.filter(line => line.startsWith('data: '));
       expect(dataLines.length).toBeGreaterThan(0);
       
       // Each data line should be valid JSON (except [DONE])
       dataLines.forEach(line => {
-        const data = line.substring(6); // Remove 'data: '
-        if (data !== '[DONE]') {
+        const data = line.substring(6).trim(); // Remove 'data: ' and trim
+        if (data && data !== '[DONE]') {
           expect(() => JSON.parse(data)).not.toThrow();
         }
       });
@@ -230,7 +231,7 @@ setTimeout(() => {
         })
         .expect(200);
 
-      const lines = response.text.split('\\n');
+      const lines = response.text.split('\n');
       const dataLines = lines.filter(line => line.startsWith('data: ') && !line.includes('[DONE]'));
       
       expect(dataLines.length).toBeGreaterThan(0);
@@ -267,7 +268,7 @@ setTimeout(() => {
         })
         .expect(200);
 
-      const lines = response.text.split('\\n');
+      const lines = response.text.split('\n');
       const dataLines = lines.filter(line => line.startsWith('data: ') && !line.includes('[DONE]'));
       
       let foundToolCall = false;

@@ -60,6 +60,45 @@ async function startServer(): Promise<void> {
 
   await server.register(cors);
 
+  // Custom error handler for proper OpenAI-compatible error responses
+  server.setErrorHandler((error, request, reply) => {
+    const requestLogger = request.log.child({ component: 'server' });
+
+    requestLogger.error(
+      {
+        error: error.message,
+        statusCode: error.statusCode || reply.statusCode,
+        validation: error.validation,
+        method: request.method,
+        url: request.url,
+        type: 'request_error',
+      },
+      'Request error occurred'
+    );
+
+    // For validation errors, return 400 with proper format
+    if (error.validation) {
+      reply.status(400).send({
+        error: {
+          message: error.message,
+          type: 'invalid_request_error',
+          code: 'bad_request',
+        },
+      });
+      return;
+    }
+
+    // Default error response
+    const statusCode = error.statusCode || 500;
+    reply.status(statusCode).send({
+      error: {
+        message: error.message || 'Internal server error',
+        type: statusCode >= 500 ? 'api_error' : 'invalid_request_error',
+        code: error.code || 'unknown_error',
+      },
+    });
+  });
+
   // Load MCP configuration on startup
   await loadMcpConfig();
 
@@ -162,7 +201,7 @@ async function startServer(): Promise<void> {
       );
 
       reply
-        .type('text/event-stream')
+        .type('text/event-stream; charset=utf-8')
         .header('Cache-Control', 'no-cache')
         .header('Connection', 'keep-alive')
         .header('Access-Control-Allow-Origin', '*');
@@ -236,6 +275,7 @@ async function startServer(): Promise<void> {
             model: { type: 'string' },
             messages: {
               type: 'array',
+              minItems: 1,
               items: {
                 type: 'object',
                 properties: {
@@ -302,7 +342,7 @@ async function startServer(): Promise<void> {
       try {
         // Manually write headers after hijacking
         reply.raw.writeHead(200, {
-          'Content-Type': 'text/event-stream',
+          'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
           'Access-Control-Allow-Origin': '*',

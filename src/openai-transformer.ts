@@ -207,7 +207,16 @@ export class OpenAITransformer {
     finishReason?: string | null,
     role?: string
   ): object {
-    const chunk: any = {
+    const delta: Record<string, unknown> = {};
+
+    if (role) {
+      delta.role = role;
+    }
+    if (content !== undefined) {
+      delta.content = content;
+    }
+
+    const chunk = {
       id: messageId,
       object: 'chat.completion.chunk',
       created: Math.floor(Date.now() / 1000),
@@ -216,19 +225,12 @@ export class OpenAITransformer {
       choices: [
         {
           index: 0,
-          delta: {},
+          delta,
           logprobs: null,
           finish_reason: finishReason || null,
         },
       ],
     };
-
-    if (role) {
-      chunk.choices[0].delta.role = role;
-    }
-    if (content !== undefined) {
-      chunk.choices[0].delta.content = content;
-    }
 
     return chunk;
   }
