@@ -271,6 +271,28 @@ jobs:
           fi
           echo "✅ API error handling test passed"
 
+      - name: Stop server for E2E tests
+        run: |
+          if [ ! -z "$SERVER_PID" ]; then
+            kill $SERVER_PID 2>/dev/null || true
+            echo "Server stopped for E2E tests"
+            sleep 2
+          fi
+
+      - name: Run E2E Tests
+        run: |
+          echo "Running E2E tests with mock Claude CLI..."
+          # Set PATH to include our mock claude
+          export PATH="$PWD/mock-bin:$PATH"
+          
+          # Run the E2E tests (they will start their own servers)
+          npm run test:e2e:openai || {
+            echo "❌ OpenAI E2E tests failed"
+            exit 1
+          }
+          
+          echo "✅ E2E tests passed"
+
       - name: Stop server
         if: always()
         run: |
@@ -279,10 +301,85 @@ jobs:
             echo "Server stopped"
           fi
 
+  e2e-tests:
+    name: E2E Tests (OpenAI Compatibility)
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output-${{ github.sha }}
+          path: dist/
+
+      - name: Create enhanced mock claude command
+        run: |
+          mkdir -p mock-bin
+          cat > mock-bin/claude << 'EOF'
+          #!/bin/bash
+          
+          # Mock Claude CLI for E2E tests
+          echo '{"type":"system","subtype":"init","session_id":"e2e-test-'$(date +%s)'"}'
+          
+          # Simulate thinking (optional)
+          if [ $((RANDOM % 2)) -eq 1 ]; then
+            echo '{"type":"assistant","message":{"content":[{"type":"thinking","text":"Processing request..."}],"stop_reason":null}}'
+          fi
+          
+          # Simulate tool use
+          echo '{"type":"assistant","message":{"content":[{"type":"text","text":"I understand your request."},{"type":"tool_use","id":"toolu_e2e'$(date +%s)'","name":"Read","input":{"file_path":"/test/file.txt"}}],"stop_reason":null}}'
+          
+          # Tool result
+          echo '{"type":"tool_result","tool_use_id":"toolu_e2e'$(date +%s)'","content":"Mock file content for E2E testing"}'
+          
+          # Final response
+          echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Mock response for E2E testing completed successfully."}],"stop_reason":"end_turn"}}'
+          EOF
+          chmod +x mock-bin/claude
+          echo "$PWD/mock-bin" >> $GITHUB_PATH
+
+      - name: Run OpenAI Compatibility E2E Tests
+        run: |
+          echo "Running OpenAI compatibility E2E tests..."
+          npm run test:e2e:openai
+
+      - name: Run Python Client Integration Tests
+        run: |
+          echo "Running Python client integration E2E tests..."
+          npm run test:e2e:python
+
+      - name: Run Node.js Client Integration Tests
+        run: |
+          echo "Running Node.js client integration E2E tests..."
+          npm run test:e2e:nodejs
+
+      - name: Archive E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            coverage/
+            *.log
+            tests/mock-claude*
+
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [test, build, security]
+    needs: [test, build, security, e2e-tests]
     if: always()
 
     steps:
@@ -292,6 +389,7 @@ jobs:
           echo "Test job status: ${{ needs.test.result }}"
           echo "Build job status: ${{ needs.build.result }}"
           echo "Security job status: ${{ needs.security.result }}"
+          echo "E2E Tests job status: ${{ needs.e2e-tests.result }}"
           echo "=========================="
           
           if [[ "${{ needs.test.result }}" != "success" ]]; then
@@ -306,6 +404,11 @@ jobs:
           
           if [[ "${{ needs.security.result }}" != "success" ]]; then
             echo "❌ Security checks failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.e2e-tests.result }}" != "success" ]]; then
+            echo "❌ E2E tests failed"
             exit 1
           fi
           
