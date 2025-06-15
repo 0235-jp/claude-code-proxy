@@ -5,6 +5,7 @@
 
 import pino from 'pino';
 import { randomUUID } from 'crypto';
+import { FastifyRequest, FastifyReply } from 'fastify';
 
 // Log level configuration
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // Default to debug for personal use
@@ -54,16 +55,16 @@ const logger = pino(
     serializers: {
       // Custom serializers for common objects
       error: pino.stdSerializers.err,
-      request: (req: any) => ({
+      request: (req: FastifyRequest) => ({
         method: req.method,
         url: req.url,
         headers: req.headers,
-        remoteAddress: req.remoteAddress,
-        remotePort: req.remotePort,
+        remoteAddress: req.socket.remoteAddress,
+        remotePort: req.socket.remotePort,
       }),
-      response: (res: any) => ({
+      response: (res: FastifyReply) => ({
         statusCode: res.statusCode,
-        headers: res.headers,
+        headers: res.getHeaders(),
       }),
     },
   },
@@ -74,7 +75,10 @@ const logger = pino(
 /**
  * Create a child logger with component context
  */
-export function createLogger(component: string, additionalContext?: Record<string, any>) {
+export function createLogger(
+  component: string,
+  additionalContext?: Record<string, unknown>
+): pino.Logger {
   return logger.child({
     component,
     ...additionalContext,
@@ -84,7 +88,7 @@ export function createLogger(component: string, additionalContext?: Record<strin
 /**
  * Create a request-scoped logger with correlation ID
  */
-export function createRequestLogger(component: string, requestId?: string) {
+export function createRequestLogger(component: string, requestId?: string): pino.Logger {
   const correlationId = requestId || randomUUID();
   return logger.child({
     component,
@@ -116,7 +120,7 @@ export class PerformanceLogger {
     );
   }
 
-  finish(result?: 'success' | 'error', additionalData?: Record<string, any>) {
+  finish(result?: 'success' | 'error', additionalData?: Record<string, unknown>): void {
     const duration = Date.now() - this.startTime;
     const logData = {
       operation: this.operation,
@@ -147,7 +151,11 @@ export class SecurityLogger {
     this.logger = createLogger(`security:${component}`);
   }
 
-  logAuthentication(userId: string, success: boolean, additionalData?: Record<string, any>) {
+  logAuthentication(
+    userId: string,
+    success: boolean,
+    additionalData?: Record<string, unknown>
+  ): void {
     const logData = {
       userId: this.maskUserId(userId),
       success,
@@ -162,7 +170,7 @@ export class SecurityLogger {
     }
   }
 
-  logPermissionCheck(operation: string, allowed: boolean, context?: Record<string, any>) {
+  logPermissionCheck(operation: string, allowed: boolean, context?: Record<string, unknown>): void {
     this.logger.info(
       {
         operation,
@@ -174,7 +182,7 @@ export class SecurityLogger {
     );
   }
 
-  logSensitiveOperation(operation: string, details?: Record<string, any>) {
+  logSensitiveOperation(operation: string, details?: Record<string, unknown>): void {
     this.logger.warn(
       {
         operation,
@@ -199,8 +207,8 @@ export class SecurityLogger {
 export function logHealthCheck(
   component: string,
   status: 'healthy' | 'degraded' | 'unhealthy',
-  details?: Record<string, any>
-) {
+  details?: Record<string, unknown>
+): void {
   const healthLogger = createLogger(`health:${component}`);
 
   const logData = {
@@ -234,8 +242,8 @@ export function logProcessEvent(
     signal?: string;
     error?: Error;
   },
-  additionalContext?: Record<string, any>
-) {
+  additionalContext?: Record<string, unknown>
+): void {
   const processLogger = createLogger('process');
 
   const logData = {
@@ -278,9 +286,9 @@ export function logProcessEvent(
  */
 export function logConfiguration(
   component: string,
-  config: Record<string, any>,
+  config: Record<string, unknown>,
   maskSensitive = true
-) {
+): void {
   const configLogger = createLogger(`config:${component}`);
 
   const maskedConfig = maskSensitive ? maskSensitiveValues(config) : config;
@@ -297,15 +305,15 @@ export function logConfiguration(
 /**
  * Utility to mask sensitive configuration values
  */
-function maskSensitiveValues(obj: Record<string, any>): Record<string, any> {
+function maskSensitiveValues(obj: Record<string, unknown>): Record<string, unknown> {
   const sensitiveKeys = ['password', 'secret', 'key', 'token', 'auth', 'credential'];
-  const masked: Record<string, any> = {};
+  const masked: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
     if (sensitiveKeys.some(sensitive => key.toLowerCase().includes(sensitive))) {
       masked[key] = '***masked***';
     } else if (typeof value === 'object' && value !== null) {
-      masked[key] = maskSensitiveValues(value);
+      masked[key] = maskSensitiveValues(value as Record<string, unknown>);
     } else {
       masked[key] = value;
     }
