@@ -94,9 +94,12 @@ describe('StreamProcessor', () => {
         expect(mockWrite).toHaveBeenCalledWith(
           expect.stringContaining('workspace=test-workspace')
         );
-        expect(mockWrite).toHaveBeenCalledWith(
-          expect.stringContaining('<thinking>')
+        
+        // Should NOT automatically send thinking block
+        const thinkingCalls = mockWrite.mock.calls.filter(call => 
+          call[0].includes('<thinking>')
         );
+        expect(thinkingCalls.length).toBe(0);
       });
 
       it('should not process system init twice', () => {
@@ -114,19 +117,10 @@ describe('StreamProcessor', () => {
     });
 
     describe('assistant messages', () => {
-      it('should process text content and close thinking', () => {
-        // First, open thinking with system init
-        const initChunk = Buffer.from('data: {"type":"system","subtype":"init","session_id":"test"}');
-        streamProcessor.processChunk(initChunk, mockReply as FastifyReply, {});
-
+      it('should process text content', () => {
         const chunk = Buffer.from('data: {"type":"assistant","message":{"content":[{"type":"text","text":"Hello world"}]}}');
         
         streamProcessor.processChunk(chunk, mockReply as FastifyReply, {});
-
-        // Should close thinking
-        expect(mockWrite).toHaveBeenCalledWith(
-          expect.stringContaining('</thinking>')
-        );
 
         // Should send text content
         expect(mockWrite).toHaveBeenCalledWith(
@@ -134,21 +128,29 @@ describe('StreamProcessor', () => {
         );
       });
 
-      it('should process thinking content', () => {
+      it('should process thinking content and open thinking block', () => {
         const chunk = Buffer.from('data: {"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Processing request..."}]}}');
         
         streamProcessor.processChunk(chunk, mockReply as FastifyReply, {});
 
+        // Should open thinking block when thinking content arrives
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('<thinking>')
+        );
         expect(mockWrite).toHaveBeenCalledWith(
           expect.stringContaining('🤖< Processing request...')
         );
       });
 
-      it('should process tool use', () => {
+      it('should process tool use and open thinking block', () => {
         const chunk = Buffer.from('data: {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file":"test.txt"}}]}}');
         
         streamProcessor.processChunk(chunk, mockReply as FastifyReply, {});
 
+        // Should open thinking block when tool use arrives
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('<thinking>')
+        );
         expect(mockWrite).toHaveBeenCalledWith(
           expect.stringContaining('🔧 Using Read:')
         );
@@ -268,9 +270,9 @@ describe('StreamProcessor', () => {
 
   describe('cleanup', () => {
     it('should close thinking block if open', () => {
-      // Open thinking first
-      const initChunk = Buffer.from('data: {"type":"system","subtype":"init","session_id":"test"}');
-      streamProcessor.processChunk(initChunk, mockReply as FastifyReply, {});
+      // Process thinking content to open thinking block
+      const thinkingChunk = Buffer.from('data: {"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Test thinking"}]}}');
+      streamProcessor.processChunk(thinkingChunk, mockReply as FastifyReply, {});
 
       // Clear previous calls
       mockWrite.mockClear();

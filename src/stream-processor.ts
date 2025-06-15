@@ -87,14 +87,12 @@ export class StreamProcessor {
         ...sessionInfo,
         session_id: sessionId,
       });
-      const sessionContent = formattedSessionInfo + '<thinking>\n';
-      this.inThinking = true;
 
       // Send initial chunk with role
       this.sendChunk(reply, undefined, null, 'assistant');
 
-      // Send session info in chunks
-      const chunks = this.splitIntoChunks(sessionContent);
+      // Send session info in chunks (without automatic thinking block)
+      const chunks = this.splitIntoChunks(formattedSessionInfo);
       for (const chunk of chunks) {
         this.sendChunk(reply, chunk);
       }
@@ -160,14 +158,14 @@ export class StreamProcessor {
       }
     }
 
-    // Close thinking if still open at end of final response
-    if (isFinalResponse && this.inThinking) {
-      this.sendChunk(reply, '\n</thinking>\n');
-      this.inThinking = false;
-    }
-
     // Send empty delta with finish_reason for final response (if text didn't already send it)
     if (isFinalResponse && content.every(item => item.type !== 'text')) {
+      // Close thinking if still open at end of final response
+      if (this.inThinking) {
+        this.sendChunk(reply, '\n</thinking>\n');
+        this.inThinking = false;
+      }
+
       this.sendChunk(reply, undefined, 'stop');
     }
   }
