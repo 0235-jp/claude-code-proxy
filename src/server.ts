@@ -489,8 +489,6 @@ async function startServer(): Promise<void> {
                   const toolsStr = mcpAllowedTools.map(tool => `"${tool}"`).join(',');
                   sessionInfo += `mcp-allowed-tools=[${toolsStr}]\n`;
                 }
-                sessionInfo += '<thinking>\n';
-                inThinking = true;
 
                 // Send initial chunk with role
                 const roleChunk = {
@@ -574,14 +572,14 @@ async function startServer(): Promise<void> {
                 }
               }
 
-              // Close thinking if still open at end of final response
-              if (isFinalResponse && inThinking) {
-                sendChunk('\n</thinking>\n');
-                inThinking = false;
-              }
-
               // Send empty delta with finish_reason for final response (if text didn't already send it)
               if (isFinalResponse && content.every(item => item.type !== 'text')) {
+                // Close thinking if still open at end of final response
+                if (inThinking) {
+                  sendChunk('\n</thinking>\n');
+                  inThinking = false;
+                }
+
                 const finalChunk = {
                   id: messageId,
                   object: 'chat.completion.chunk',
