@@ -193,7 +193,30 @@ async function startServer(): Promise<void> {
         perfLogger.finish('error', {
           error: error instanceof Error ? error.message : 'Unknown error',
         });
-        throw error;
+
+        // Since we hijacked the reply, we need to send a proper error response
+        try {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const errorData = {
+            type: 'error',
+            error: {
+              message: errorMessage,
+              type: 'api_error',
+            },
+          };
+          reply.raw.write(`data: ${JSON.stringify(errorData)}\n\n`);
+          reply.raw.end();
+        } catch (endError) {
+          requestLogger.error(
+            {
+              error: endError instanceof Error ? endError.message : 'Unknown error',
+              type: 'error_response_failed',
+            },
+            'Failed to send error response for Claude API'
+          );
+          // Force close the connection if we can't send a proper error response
+          reply.raw.destroy();
+        }
       }
     }
   );
@@ -360,13 +383,25 @@ async function startServer(): Promise<void> {
 
       reply.hijack();
 
-      // Manually write headers after hijacking
-      reply.raw.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-      });
+      try {
+        // Manually write headers after hijacking
+        reply.raw.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+        });
+      } catch (headerError) {
+        requestLogger.error(
+          {
+            error: headerError instanceof Error ? headerError.message : 'Unknown error',
+            type: 'header_write_error',
+          },
+          'Failed to write response headers'
+        );
+        reply.raw.destroy();
+        return;
+      }
 
       // Create a custom stream handler for OpenAI format
       const originalWrite = reply.raw.write;
@@ -388,25 +423,36 @@ async function startServer(): Promise<void> {
 
       // Helper function to send a chunk
       function sendChunk(content: string, finishReason: string | null = null): void {
-        const chunk = {
-          id: messageId,
-          object: 'chat.completion.chunk',
-          created: Math.floor(Date.now() / 1000),
-          model: 'claude-code',
-          system_fingerprint: systemFingerprint,
-          choices: [
+        try {
+          const chunk = {
+            id: messageId,
+            object: 'chat.completion.chunk',
+            created: Math.floor(Date.now() / 1000),
+            model: 'claude-code',
+            system_fingerprint: systemFingerprint,
+            choices: [
+              {
+                index: 0,
+                delta: { content },
+                logprobs: null,
+                finish_reason: finishReason,
+              },
+            ],
+          };
+          (originalWrite as (chunk: Buffer | string) => boolean).call(
+            reply.raw,
+            `data: ${JSON.stringify(chunk)}\n\n`
+          );
+        } catch (writeError) {
+          requestLogger.error(
             {
-              index: 0,
-              delta: { content },
-              logprobs: null,
-              finish_reason: finishReason,
+              error: writeError instanceof Error ? writeError.message : 'Unknown error',
+              type: 'chunk_write_error',
             },
-          ],
-        };
-        (originalWrite as (chunk: Buffer | string) => boolean).call(
-          reply.raw,
-          `data: ${JSON.stringify(chunk)}\n\n`
-        );
+            'Failed to write chunk to stream'
+          );
+          // Don't throw here as it would break the entire stream
+        }
       }
 
       reply.raw.write = function (chunk: Buffer | string): boolean {
@@ -562,6 +608,12 @@ async function startServer(): Promise<void> {
 
               for (const item of content) {
                 if (item.type === 'tool_result') {
+                  // Reopen thinking if it was closed by text
+                  if (!inThinking) {
+                    sendChunk('\n<thinking>\n');
+                    inThinking = true;
+                  }
+
                   const toolContent = item.content || '';
                   const isError = item.is_error || false;
 
@@ -588,6 +640,28 @@ async function startServer(): Promise<void> {
               for (let i = 0; i < chunks.length; i++) {
                 sendChunk(chunks[i], i === chunks.length - 1 ? 'stop' : null);
               }
+            } else {
+              // Handle unknown JSON data types
+              requestLogger.warn(
+                {
+                  unknownType: jsonData.type,
+                  data: jsonData,
+                  type: 'unknown_json_type',
+                },
+                `Received unknown JSON data type: ${jsonData.type}`
+              );
+
+              // Show unknown data in thinking block for debugging
+              if (!inThinking) {
+                sendChunk('\n<thinking>\n');
+                inThinking = true;
+              }
+
+              const unknownText = `\n🔍 Unknown data type '${jsonData.type}': ${JSON.stringify(jsonData, null, 2)}\n`;
+              const chunks = splitIntoChunks(unknownText);
+              for (const chunk of chunks) {
+                sendChunk(chunk);
+              }
             }
           } catch (e) {
             requestLogger.error(
@@ -597,6 +671,11 @@ async function startServer(): Promise<void> {
               },
               'Error processing chunk in OpenAI stream'
             );
+            // Close thinking block if it was open before sending error
+            if (inThinking) {
+              sendChunk('\n</thinking>\n');
+              inThinking = false;
+            }
             // Send error to client in proper format
             const errorText = `\n⚠️ Stream processing error: ${(e as Error).message}\n`;
             const chunks = splitIntoChunks(errorText);
@@ -611,6 +690,39 @@ async function startServer(): Promise<void> {
       (reply.raw as unknown as { end: (...args: unknown[]) => unknown }).end = function (
         ...args: unknown[]
       ): unknown {
+        // Close thinking block if still open when stream ends
+        if (inThinking) {
+          sendChunk('\n</thinking>\n');
+          inThinking = false;
+          // Send a message explaining the unexpected termination
+          const terminationText = '\n⚠️ Connection terminated unexpectedly\n';
+          const chunks = splitIntoChunks(terminationText);
+          for (let i = 0; i < chunks.length; i++) {
+            sendChunk(chunks[i], i === chunks.length - 1 ? 'stop' : null);
+          }
+        } else if (!sessionPrinted) {
+          // If no session was printed (no data received at all), send a minimal response
+          const roleChunk = {
+            id: messageId,
+            object: 'chat.completion.chunk',
+            created: Math.floor(Date.now() / 1000),
+            model: 'claude-code',
+            system_fingerprint: systemFingerprint,
+            choices: [
+              {
+                index: 0,
+                delta: { role: 'assistant' },
+                logprobs: null,
+                finish_reason: null,
+              },
+            ],
+          };
+          (originalWrite as (chunk: Buffer | string) => boolean).call(
+            reply.raw,
+            `data: ${JSON.stringify(roleChunk)}\n\n`
+          );
+          sendChunk('\n⚠️ No response received from Claude\n', 'stop');
+        }
         (originalWrite as (chunk: Buffer | string) => boolean).call(reply.raw, 'data: [DONE]\n\n');
         return (originalEnd as (...args: unknown[]) => unknown).call(reply.raw, ...args);
       };
@@ -641,7 +753,40 @@ async function startServer(): Promise<void> {
         perfLogger.finish('error', {
           error: error instanceof Error ? error.message : 'Unknown error',
         });
-        throw error;
+
+        // Since we hijacked the reply, we need to send a proper error response
+        try {
+          // Close thinking block if it was open
+          if (inThinking) {
+            sendChunk('\n</thinking>\n');
+            inThinking = false;
+          }
+
+          // Send error message in OpenAI format
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const errorText = `\n❌ Error: ${errorMessage}\n`;
+          const chunks = splitIntoChunks(errorText);
+          for (let i = 0; i < chunks.length; i++) {
+            sendChunk(chunks[i], i === chunks.length - 1 ? 'stop' : null);
+          }
+
+          // Send final [DONE] to properly close the stream
+          (originalWrite as (chunk: Buffer | string) => boolean).call(
+            reply.raw,
+            'data: [DONE]\n\n'
+          );
+          reply.raw.end();
+        } catch (endError) {
+          requestLogger.error(
+            {
+              error: endError instanceof Error ? endError.message : 'Unknown error',
+              type: 'error_response_failed',
+            },
+            'Failed to send error response'
+          );
+          // Force close the connection if we can't send a proper error response
+          reply.raw.destroy();
+        }
       }
     }
   );
