@@ -4,10 +4,11 @@ module.exports = {
   roots: ['<rootDir>/src', '<rootDir>/tests'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
   testPathIgnorePatterns: [
+    '/node_modules/',
     'tests/e2e.test.ts', 
     'tests/server.integration.test.ts',
-    'tests/openai-client-compatibility.e2e.test.ts',
-    'tests/client-integrations/*.e2e.test.ts'
+    'tests/.*\\.e2e\\.test\\.ts$',
+    'tests/client-integrations/.*\\.e2e\\.test\\.ts$'
   ],
   transform: {
     '^.+\\.ts$': 'ts-jest',

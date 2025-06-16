@@ -8,17 +8,18 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 
 // Node.js version compatibility for fetch
-const fetchPolyfill = async (url: string) => {
+const fetchPolyfill = async (url: string): Promise<{ ok: boolean; status: number }> => {
   try {
     // Try native fetch first (Node.js 18+)
     if (typeof fetch !== 'undefined') {
-      return await fetch(url);
+      const response = await fetch(url);
+      return { ok: response.ok, status: response.status };
     }
     // Fallback to HTTP module for older Node.js versions
     const http = await import('http');
-    return new Promise((resolve, reject) => {
+    return new Promise<{ ok: boolean; status: number }>((resolve, reject) => {
       const req = http.get(url, (res) => {
-        resolve({ ok: res.statusCode === 200, status: res.statusCode });
+        resolve({ ok: res.statusCode === 200, status: res.statusCode || 0 });
       });
       req.on('error', reject);
       req.setTimeout(5000, () => {
