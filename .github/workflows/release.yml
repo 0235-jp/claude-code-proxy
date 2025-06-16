@@ -193,8 +193,8 @@ jobs:
 
       - name: Configure Git
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "yamashita+github@0235.co.jp"
+          git config --local user.name "0235-admin"
           
           # Configure git to use the token for authentication
           git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
@@ -209,7 +209,7 @@ jobs:
           - Update package.json version to $NEW_VERSION
           - Automated version bump via GitHub Actions
           
-          Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          Co-authored-by: 0235-admin <yamashita+github@0235.co.jp>"
 
       - name: Create and push tag
         run: |
