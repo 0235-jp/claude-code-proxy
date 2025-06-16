@@ -10,41 +10,10 @@ import { ValidationError, ErrorCode, ValidationErrorDetail } from '../errors';
  * Validation constraints for different fields
  */
 export const ValidationConstraints = {
-  // Maximum lengths (in characters)
-  MAX_PROMPT_LENGTH: 100000, // 100KB roughly (assuming UTF-8)
-  MAX_SYSTEM_PROMPT_LENGTH: 10000, // 10KB
-  MAX_SESSION_ID_LENGTH: 128,
-  MAX_WORKSPACE_NAME_LENGTH: 64,
-  MAX_TOOL_NAME_LENGTH: 128,
-  MAX_ARRAY_LENGTH: 100,
-  MAX_MESSAGE_CONTENT_LENGTH: 100000,
-
-  // Patterns
+  // Patterns for format validation (no size limits for personal use)
   SESSION_ID_PATTERN: /^[a-zA-Z0-9-_]+$/,
   WORKSPACE_NAME_PATTERN: /^[a-zA-Z0-9-_]+$/,
   TOOL_NAME_PATTERN: /^[a-zA-Z0-9:.\-_]+$/, // Allow colon for MCP tools like "mcp:tool"
-} as const;
-
-/**
- * Custom validation error messages
- */
-export const ValidationMessages = {
-  PROMPT_TOO_LONG: `Prompt must be ${ValidationConstraints.MAX_PROMPT_LENGTH} characters or less`,
-  SYSTEM_PROMPT_TOO_LONG: `System prompt must be ${ValidationConstraints.MAX_SYSTEM_PROMPT_LENGTH} characters or less`,
-  SESSION_ID_INVALID:
-    'Session ID must contain only alphanumeric characters, hyphens, and underscores',
-  SESSION_ID_TOO_LONG: `Session ID must be ${ValidationConstraints.MAX_SESSION_ID_LENGTH} characters or less`,
-  WORKSPACE_NAME_INVALID:
-    'Workspace name must contain only alphanumeric characters, hyphens, and underscores',
-  WORKSPACE_NAME_TOO_LONG: `Workspace name must be ${ValidationConstraints.MAX_WORKSPACE_NAME_LENGTH} characters or less`,
-  TOOL_NAME_INVALID:
-    'Tool name must contain only alphanumeric characters, dots, colons, hyphens, and underscores',
-  TOOL_NAME_TOO_LONG: `Tool name must be ${ValidationConstraints.MAX_TOOL_NAME_LENGTH} characters or less`,
-  ARRAY_TOO_LONG: `Array must contain ${ValidationConstraints.MAX_ARRAY_LENGTH} items or less`,
-  MESSAGE_CONTENT_TOO_LONG: `Message content must be ${ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH} characters or less`,
-  EMPTY_PROMPT: 'Prompt cannot be empty',
-  EMPTY_MESSAGE_CONTENT: 'Message content cannot be empty',
-  INVALID_MESSAGE_ROLE: 'Message role must be one of: system, user, assistant',
 } as const;
 
 /**
@@ -58,56 +27,44 @@ export const claudeApiValidationSchema: FastifySchema = {
       prompt: {
         type: 'string',
         minLength: 1,
-        maxLength: ValidationConstraints.MAX_PROMPT_LENGTH,
       },
       'session-id': {
         type: 'string',
-        maxLength: ValidationConstraints.MAX_SESSION_ID_LENGTH,
         pattern: ValidationConstraints.SESSION_ID_PATTERN.source,
       },
       workspace: {
         type: 'string',
-        maxLength: ValidationConstraints.MAX_WORKSPACE_NAME_LENGTH,
         pattern: ValidationConstraints.WORKSPACE_NAME_PATTERN.source,
       },
       'system-prompt': {
         type: 'string',
-        maxLength: ValidationConstraints.MAX_SYSTEM_PROMPT_LENGTH,
       },
       'dangerously-skip-permissions': { type: 'boolean' },
       'allowed-tools': {
         type: 'array',
-        maxItems: ValidationConstraints.MAX_ARRAY_LENGTH,
         items: {
           type: 'string',
-          maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
           pattern: ValidationConstraints.TOOL_NAME_PATTERN.source,
         },
       },
       'disallowed-tools': {
         type: 'array',
-        maxItems: ValidationConstraints.MAX_ARRAY_LENGTH,
         items: {
           type: 'string',
-          maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
           pattern: ValidationConstraints.TOOL_NAME_PATTERN.source,
         },
       },
       'mcp-allowed-tools': {
         type: 'array',
-        maxItems: ValidationConstraints.MAX_ARRAY_LENGTH,
         items: {
           type: 'string',
-          maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
           pattern: ValidationConstraints.TOOL_NAME_PATTERN.source,
         },
       },
       files: {
         type: 'array',
-        maxItems: ValidationConstraints.MAX_ARRAY_LENGTH,
         items: {
           type: 'string',
-          maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
         },
       },
     },
@@ -126,7 +83,6 @@ export const openAIApiValidationSchema: FastifySchema = {
       messages: {
         type: 'array',
         minItems: 1,
-        maxItems: ValidationConstraints.MAX_ARRAY_LENGTH,
         items: {
           type: 'object',
           required: ['role', 'content'],
@@ -140,7 +96,6 @@ export const openAIApiValidationSchema: FastifySchema = {
                 {
                   type: 'string',
                   minLength: 1,
-                  maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
                 },
                 {
                   type: 'array',
@@ -154,7 +109,6 @@ export const openAIApiValidationSchema: FastifySchema = {
                       },
                       text: {
                         type: 'string',
-                        maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
                       },
                       image_url: {
                         type: 'object',
@@ -162,7 +116,6 @@ export const openAIApiValidationSchema: FastifySchema = {
                         properties: {
                           url: {
                             type: 'string',
-                            maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
                           },
                           detail: {
                             type: 'string',
@@ -197,11 +150,9 @@ export const openAIApiValidationSchema: FastifySchema = {
           properties: {
             id: {
               type: 'string',
-              maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
             },
             name: {
               type: 'string',
-              maxLength: ValidationConstraints.MAX_WORKSPACE_NAME_LENGTH,
             },
           },
         },
@@ -237,34 +188,7 @@ export async function performCustomValidation(request: FastifyRequest): Promise<
     }
   }
 
-  // Example: Validate combined message length for OpenAI endpoint
-  if (request.url === '/v1/chat/completions' && body.messages) {
-    const messages = body.messages as {
-      content?: string | Array<{ type: string; text?: string }>;
-    }[];
-    const totalLength = messages.reduce((sum: number, msg) => {
-      if (typeof msg.content === 'string') {
-        return sum + msg.content.length;
-      } else if (Array.isArray(msg.content)) {
-        return (
-          sum +
-          msg.content.reduce((contentSum, item) => {
-            return contentSum + (item.text?.length || 0);
-          }, 0)
-        );
-      }
-      return sum;
-    }, 0);
-
-    if (totalLength > ValidationConstraints.MAX_PROMPT_LENGTH) {
-      validationErrors.push({
-        field: 'messages',
-        value: `${totalLength} characters total`,
-        message: `Total message content exceeds maximum of ${ValidationConstraints.MAX_PROMPT_LENGTH} characters`,
-        code: 'messages_too_long',
-      });
-    }
-  }
+  // No size-based validation - let actual memory/processing limits handle large requests
 
   // Throw validation error if any issues found
   if (validationErrors.length > 0) {
