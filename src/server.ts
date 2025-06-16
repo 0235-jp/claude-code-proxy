@@ -12,6 +12,7 @@ import { serverLogger, createRequestLogger, PerformanceLogger } from './logger';
 import { authenticateRequest, getAuthStatus } from './auth';
 import { OpenAITransformer } from './openai-transformer';
 import { StreamProcessor } from './stream-processor';
+import { errorHandler, InvalidRequestError, createStreamingError, ErrorCode } from './errors';
 
 // Configure Fastify with custom logger
 const server = fastify({
@@ -60,44 +61,8 @@ async function startServer(): Promise<void> {
 
   await server.register(cors);
 
-  // Custom error handler for proper OpenAI-compatible error responses
-  server.setErrorHandler((error, request, reply) => {
-    const requestLogger = request.log.child({ component: 'server' });
-
-    requestLogger.error(
-      {
-        error: error.message,
-        statusCode: error.statusCode || reply.statusCode,
-        validation: error.validation,
-        method: request.method,
-        url: request.url,
-        type: 'request_error',
-      },
-      'Request error occurred'
-    );
-
-    // For validation errors, return 400 with proper format
-    if (error.validation) {
-      reply.status(400).send({
-        error: {
-          message: error.message,
-          type: 'invalid_request_error',
-          code: 'bad_request',
-        },
-      });
-      return;
-    }
-
-    // Default error response
-    const statusCode = error.statusCode || 500;
-    reply.status(statusCode).send({
-      error: {
-        message: error.message || 'Internal server error',
-        type: statusCode >= 500 ? 'api_error' : 'invalid_request_error',
-        code: error.code || 'unknown_error',
-      },
-    });
-  });
+  // Use centralized error handler
+  server.setErrorHandler(errorHandler.handleError);
 
   // Load MCP configuration on startup
   await loadMcpConfig();
@@ -237,15 +202,9 @@ async function startServer(): Promise<void> {
 
         // Since we hijacked the reply, we need to send a proper error response
         try {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          const errorData = {
-            type: 'error',
-            error: {
-              message: errorMessage,
-              type: 'api_error',
-            },
-          };
-          reply.raw.write(`data: ${JSON.stringify(errorData)}\n\n`);
+          const errorToStream = error instanceof Error ? error : new Error('Unknown error');
+          const streamError = createStreamingError(errorToStream, request.id);
+          reply.raw.write(streamError);
           reply.raw.end();
         } catch (endError) {
           requestLogger.error(
@@ -295,14 +254,11 @@ async function startServer(): Promise<void> {
       const { messages, stream = true } = request.body;
 
       if (!stream) {
-        reply.code(400).send({
-          error: {
-            message: 'Only streaming is supported',
-            type: 'invalid_request_error',
-            code: 'streaming_required',
-          },
-        });
-        return;
+        throw new InvalidRequestError(
+          'Only streaming is supported',
+          { requestId: request.id, endpoint: '/v1/chat/completions' },
+          ErrorCode.INVALID_REQUEST
+        );
       }
 
       // Convert OpenAI request to Claude API parameters

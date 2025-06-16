@@ -3,8 +3,9 @@
  * Provides Bearer token authentication compatible with OpenAI API format
  */
 
-import { FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyRequest } from 'fastify';
 import { SecurityLogger } from './logger';
+import { createAuthenticationError } from './errors';
 
 const securityLogger = new SecurityLogger('auth');
 
@@ -62,10 +63,7 @@ function validateApiKey(apiKey: string): boolean {
  * Authentication middleware for Fastify
  * Verifies Bearer token in Authorization header
  */
-export async function authenticateRequest(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function authenticateRequest(request: FastifyRequest): Promise<void> {
   // Skip authentication if not enabled
   if (!isAuthEnabled()) {
     securityLogger.logPermissionCheck('api_access', true, {
@@ -95,14 +93,12 @@ export async function authenticateRequest(
       reason: 'missing_or_invalid_bearer_token',
     });
 
-    reply.code(401).send({
-      error: {
-        message: 'Invalid authentication credentials',
-        type: 'invalid_request_error',
-        code: 'invalid_api_key',
-      },
+    throw createAuthenticationError('missing_key', {
+      requestId: request.id,
+      endpoint: request.url,
+      method: request.method,
+      clientIp: request.ip,
     });
-    return;
   }
 
   if (!validateApiKey(apiKey)) {
@@ -111,14 +107,13 @@ export async function authenticateRequest(
       reason: 'invalid_api_key',
     });
 
-    reply.code(401).send({
-      error: {
-        message: 'Invalid authentication credentials',
-        type: 'invalid_request_error',
-        code: 'invalid_api_key',
-      },
+    throw createAuthenticationError('invalid_key', {
+      requestId: request.id,
+      endpoint: request.url,
+      method: request.method,
+      clientIp: request.ip,
+      keyPrefix: apiKey.substring(0, 8),
     });
-    return;
   }
 
   // Authentication successful
