@@ -4,6 +4,7 @@
   "main": "dist/server.js",
   "dependencies": {
     "@fastify/cors": "^9.x",
+    "@fastify/multipart": "^8.x",
     "dotenv": "^16.x",
     "fastify": "^4.x",
     "pino": "^8.x"
@@ -17,9 +18,11 @@
     "eslint": "^8.x",
     "eslint-config-prettier": "^9.x",
     "eslint-plugin-prettier": "^5.x",
+    "form-data": "^4.x",
     "husky": "^8.x",
     "jest": "^30.0.0",
     "lint-staged": "^15.x",
+    "node-fetch": "^3.x",
     "nodemon": "^3.x",
     "pino-pretty": "^10.x",
     "prettier": "^3.x",
