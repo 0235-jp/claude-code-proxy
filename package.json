@@ -51,6 +51,8 @@
     "test:e2e:openai": "jest tests/openai-client-compatibility.e2e.test.ts --testTimeout=30000 --testPathIgnorePatterns=[]",
     "test:e2e:python": "jest tests/client-integrations/python-openai.e2e.test.ts --testTimeout=30000 --testPathIgnorePatterns=[]",
     "test:e2e:nodejs": "jest tests/client-integrations/nodejs-openai.e2e.test.ts --testTimeout=30000 --testPathIgnorePatterns=[]",
+    "test:e2e:files": "jest tests/files-api.e2e.test.ts --testTimeout=30000 --testPathIgnorePatterns=[]",
+    "test:e2e:claude-files": "jest tests/claude-files-api.e2e.test.ts --testTimeout=30000 --testPathIgnorePatterns=[]",
     "test:e2e:all": "jest --testPathPattern='.*\\.e2e\\.test\\.ts$' --testTimeout=30000 --testPathIgnorePatterns=[]",
     "test:unit": "jest --testPathIgnorePatterns='tests/e2e.test.ts|tests/server.integration.test.ts|tests/.*\\.e2e\\.test\\.ts$|tests/client-integrations/.*\\.e2e\\.test\\.ts$'",
     "test:ci": "npm run test:unit && npm run test:coverage",
