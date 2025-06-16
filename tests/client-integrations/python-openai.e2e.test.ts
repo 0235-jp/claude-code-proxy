@@ -69,7 +69,13 @@ setTimeout(() => {
     const standardClaudePath = path.join(path.dirname(mockClaudePath), 'claude');
     await fs.copyFile(mockClaudePath, standardClaudePath);
     await fs.chmod(standardClaudePath, '755');
-    process.env.PATH = `${path.dirname(standardClaudePath)}:${process.env.PATH}`;
+    
+    // In CI, prefer using existing mock if available
+    if (process.env.CI && process.env.PATH?.includes('mock-bin')) {
+      console.log('Using existing CI mock claude from PATH');
+    } else {
+      process.env.PATH = `${path.dirname(standardClaudePath)}:${process.env.PATH || ''}`;
+    }
     
     // Start server
     return new Promise<void>((resolve, reject) => {
@@ -77,7 +83,15 @@ setTimeout(() => {
         reject(new Error('Server failed to start within timeout'));
       }, 15000);
 
-      serverProcess = spawn('node', ['-r', 'ts-node/register', 'src/server.ts'], {
+      // Use built JavaScript in CI, TypeScript in development
+      const serverScript = process.env.CI 
+        ? 'dist/server.js' 
+        : 'src/server.ts';
+      const nodeArgs = process.env.CI 
+        ? [serverScript] 
+        : ['-r', 'ts-node/register', serverScript];
+      
+      serverProcess = spawn('node', nodeArgs, {
         cwd: path.join(__dirname, '..', '..'),
         env: {
           ...process.env,
