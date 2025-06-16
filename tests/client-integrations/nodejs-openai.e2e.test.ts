@@ -10,7 +10,7 @@ import * as path from 'path';
 describe('Node.js OpenAI Client Integration E2E Tests', () => {
   let serverProcess: ChildProcess;
   let serverReady = false;
-  const serverPort = 3004;
+  const serverPort = 3004 + Math.floor(Math.random() * 100);
   const serverUrl = `http://localhost:${serverPort}`;
   
   beforeAll(async () => {

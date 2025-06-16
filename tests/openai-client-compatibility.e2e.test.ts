@@ -12,7 +12,7 @@ import * as path from 'path';
 describe('OpenAI API Compatibility E2E Tests', () => {
   let serverProcess: ChildProcess;
   let serverReady = false;
-  const serverPort = 3002; // Use different port to avoid conflicts
+  const serverPort = 3002 + Math.floor(Math.random() * 100); // Use random port to avoid conflicts
   const serverUrl = `http://localhost:${serverPort}`;
   
   beforeAll(async () => {

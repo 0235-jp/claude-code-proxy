@@ -24,4 +24,8 @@ module.exports = {
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 10000,
+  // CI environment optimizations
+  maxWorkers: process.env.CI ? 1 : '50%',
+  forceExit: process.env.CI ? true : false,
+  detectOpenHandles: process.env.CI ? false : true,
 };

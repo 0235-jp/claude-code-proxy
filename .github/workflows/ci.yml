@@ -39,9 +39,13 @@ jobs:
 
       - name: Run unit tests
         run: npm run test:unit
+        env:
+          CI: true
 
       - name: Run tests with coverage
         run: npm run test:coverage
+        env:
+          CI: true
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4
@@ -355,16 +359,22 @@ jobs:
         run: |
           echo "Running OpenAI compatibility E2E tests..."
           npm run test:e2e:openai
+        env:
+          CI: true
 
       - name: Run Python Client Integration Tests
         run: |
           echo "Running Python client integration E2E tests..."
           npm run test:e2e:python
+        env:
+          CI: true
 
       - name: Run Node.js Client Integration Tests
         run: |
           echo "Running Node.js client integration E2E tests..."
           npm run test:e2e:nodejs
+        env:
+          CI: true
 
       - name: Archive E2E test results
         if: always()
