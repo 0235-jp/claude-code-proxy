@@ -1,6 +1,6 @@
 {
-  "name": "claude-code-chat-server",
-  "version": "1.0.0",
+  "name": "claude-code-proxy",
+  "version": "0.3.0",
   "main": "dist/server.js",
   "dependencies": {
     "@fastify/cors": "^9.x",

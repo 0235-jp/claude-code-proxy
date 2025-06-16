@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Server Management
-- `npm start` - Start the server (default: port 3000, host 0.0.0.0)
-- `npm run dev` - Start development server with file watching (TypeScript)
+### Proxy Server Management
+- `npm start` - Start the proxy server (default: port 3000, host 0.0.0.0)
+- `npm run dev` - Start development proxy server with file watching (TypeScript)
 - `npm run build` - Build TypeScript to JavaScript
-- `npm run start:bg` - Start server in background with logging to server.log
-- `npm run stop` - Stop background server
-- `npm run status` - Check if background server is running
-- `npm run logs` - View server logs (tail -f server.log)
+- `npm run start:bg` - Start proxy server in background with logging to server.log
+- `npm run stop` - Stop background proxy server
+- `npm run status` - Check if background proxy server is running
+- `npm run logs` - View proxy server logs (tail -f server.log)
 
 ### Code Quality
 - `npm run lint` - Run ESLint on TypeScript files
@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run type-check` - Run TypeScript type checking
 - `npm run check-all` - Run all checks (type, lint, format)
 
-### Testing the Server
+### Testing the Proxy Server
 Test the API endpoints using curl (default port 3000):
 
 #### Without Authentication (Development)
