@@ -29,7 +29,7 @@ const server = fastify({
   logger: serverLogger,
   genReqId: () => require('crypto').randomUUID(),
   requestIdHeader: 'x-request-id',
-  // No bodyLimit - allow unlimited size for personal use
+  bodyLimit: 1048576 * 1000 * 1000 * 1000, // ~1000TB limit for personal use
   ajv: {
     customOptions: {
       removeAdditional: false, // Keep additional properties
@@ -79,7 +79,16 @@ async function startServer(): Promise<void> {
   }
 
   await server.register(cors);
-  await server.register(multipart); // No limits for personal use
+  await server.register(multipart, {
+    limits: {
+      fieldNameSize: 1000000, // 1M characters
+      fieldSize: 1048576 * 1000 * 1000 * 1000, // ~1000TB
+      fields: 100000, // 100k fields
+      fileSize: 1048576 * 1000 * 1000 * 1000, // ~1000TB
+      files: 100000, // 100k files
+      headerPairs: 1000000, // 1M header pairs
+    },
+  });
 
   // Use centralized error handler
   server.setErrorHandler(errorHandler.handleError);
