@@ -1,13 +1,13 @@
-# Claude Code Server
+# Claude Code Proxy
 
 [![CI](https://github.com/0235-jp/Claude-Code-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/0235-jp/Claude-Code-Server/actions/workflows/ci.yml)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-0235--jp%2FClaude--Code--Server-blue.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAyCAYAAAAnWDnqAAAAAXNSR0IArs4c6QAAA05JREFUaEPtmUtyEzEQhtWTQyQLHNak2AB7ZnyXZMEjXMGeK/AIi+QuHrMnbChYY7MIh8g01fJoopFb0uhhEqqcbWTp06/uv1saEDv4O3n3dV60RfP947Mm9/SQc0ICFQgzfc4CYZoTPAswgSJCCUJUnAAoRHOAUOcATwbmVLWdGoH//PB8mnKqScAhsD0kYP3j/Yt5LPQe2KvcXmGvRHcDnpxfL2zOYJ1mFwrryWTz0advv1Ut4CJgf5uhDuDj5eUcAUoahrdY/56ebRWeraTjMt/00Sh3UDtjgHtQNHwcRGOC98BJEAEymycmYcWwOprTgcB6VZ5JK5TAJ+fXGLBm3FDAmn6oPPjR4rKCAoJCal2eAiQp2x0vxTPB3ALO2CRkwmDy5WohzBDwSEFKRwPbknEggCPB/imwrycgxX2NzoMCHhPkDwqYMr9tRcP5qNrMZHkVnOjRMWwLCcr8ohBVb1OMjxLwGCvjTikrsBOiA6fNyCrm8V1rP93iVPpwaE+gO0SsWmPiXB+jikdf6SizrT5qKasx5j8ABbHpFTx+vFXp9EnYQmLx02h1QTTrl6eDqxLnGjporxl3NL3agEvXdT0WmEost648sQOYAeJS9Q7bfUVoMGnjo4AZdUMQku50McDcMWcBPvr0SzbTAFDfvJqwLzgxwATnCgnp4wDl6Aa+Ax283gghmj+vj7feE2KBBRMW3FzOpLOADl0Isb5587h/U4gGvkt5v60Z1VLG8BhYjbzRwyQZemwAd6cCR5/XFWLYZRIMpX39AR0tjaGGiGzLVyhse5C9RKC6ai42ppWPKiBagOvaYk8lO7DajerabOZP46Lby5wKjw1HCRx7p9sVMOWGzb/vA1hwiWc6jm3MvQDTogQkiqIhJV0nBQBTU+3okKCFDy9WwferkHjtxib7t3xIUQtHxnIwtx4mpg26/HfwVNVDb4oI9RHmx5WGelRVlrtiw43zboCLaxv46AZeB3IlTkwouebTr1y2NjSpHz68WNFjHvupy3q8TFn3Hos2IAk4Ju5dCo8B3wP7VPr/FGaKiG+T+v+TQqIrOqMTL1VdWV1DdmcbO8KXBz6esmYWYKPwDL5b5FA1a0hwapHiom0r/cKaoqr+27/XcrS5UwSMbQAAAABJRU5ErkJggg==)](https://deepwiki.com/0235-jp/Claude-Code-Server)
 
-A streaming API server that provides HTTP access to Claude Code CLI functionality with MCP support.
+A streaming HTTP proxy server that provides API access to Claude Code CLI functionality with MCP support.
 
 ## Overview
 
-Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.0.18+), providing RESTful streaming APIs for interacting with Claude Code sessions. It supports workspace management and Model Context Protocol (MCP) integration for external data sources.
+Claude Code Proxy is a Fastify-based HTTP proxy server that wraps the Claude Code CLI (v1.0.18+), providing RESTful streaming APIs for interacting with Claude Code sessions. It supports workspace management and Model Context Protocol (MCP) integration for external data sources.
 
 ## Features
 
@@ -36,7 +36,7 @@ Claude Code Server is a Fastify-based server that wraps the Claude Code CLI (v1.
 ## Project Structure
 
 ```
-claude-code-server/
+claude-code-proxy/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml          # GitHub Actions CI/CD workflow
@@ -325,7 +325,7 @@ curl -X POST http://localhost:3000/api/claude \
 
 ### Overview
 
-Claude Code Server supports optional Bearer token authentication compatible with OpenAI's API format. This allows you to secure your server in production environments while maintaining compatibility with OpenAI client libraries.
+Claude Code Proxy supports optional Bearer token authentication compatible with OpenAI's API format. This allows you to secure your proxy server in production environments while maintaining compatibility with OpenAI client libraries.
 
 ### Authentication Modes
 

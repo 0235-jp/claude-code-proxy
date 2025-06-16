@@ -1,0 +1,294 @@
+name: Release Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      custom_version:
+        description: 'Custom version (leave empty to auto-increment)'
+        required: false
+        type: string
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CI checks
+        run: |
+          echo "Running quality checks before release..."
+          npm run type-check
+          npm run lint
+          npm run format:check
+          npm run test:unit
+          npm run build
+
+      - name: Get current version
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
+          
+          if [ -n "${{ github.event.inputs.custom_version }}" ]; then
+            NEW_VERSION="${{ github.event.inputs.custom_version }}"
+            echo "Using custom version: $NEW_VERSION"
+          else
+            VERSION_TYPE="${{ github.event.inputs.version_type }}"
+            echo "Calculating $VERSION_TYPE version bump from $CURRENT_VERSION"
+            
+            # Parse current version
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+            
+            case $VERSION_TYPE in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+            
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+          
+          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version will be: $NEW_VERSION"
+
+      - name: Validate version format
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          if ! echo "$NEW_VERSION" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Invalid version format: $NEW_VERSION"
+            echo "Version must follow semantic versioning (X.Y.Z)"
+            exit 1
+          fi
+          echo "✅ Version format is valid: $NEW_VERSION"
+
+      - name: Check if tag exists
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          if git tag | grep -q "^v$NEW_VERSION$"; then
+            echo "❌ Tag v$NEW_VERSION already exists"
+            exit 1
+          fi
+          echo "✅ Tag v$NEW_VERSION is available"
+
+      - name: Update package.json version
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          echo "Updating package.json version to $NEW_VERSION"
+          
+          # Use npm version command to update package.json
+          npm version $NEW_VERSION --no-git-tag-version
+          
+          # Verify the change
+          UPDATED_VERSION=$(node -p "require('./package.json').version")
+          if [ "$UPDATED_VERSION" != "$NEW_VERSION" ]; then
+            echo "❌ Failed to update package.json version"
+            exit 1
+          fi
+          echo "✅ Successfully updated package.json to version $NEW_VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
+          
+          echo "Generating changelog for v$NEW_VERSION"
+          
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -n "$LAST_TAG" ]; then
+            echo "Getting commits since $LAST_TAG"
+            COMMITS=$(git log $LAST_TAG..HEAD --oneline --no-merges)
+          else
+            echo "No previous tags found, getting recent commits"
+            COMMITS=$(git log --oneline --no-merges -10)
+          fi
+          
+          # Create changelog
+          cat > CHANGELOG_TEMP.md << EOF
+          ## Release v$NEW_VERSION
+          
+          **Released:** $(date '+%Y-%m-%d')
+          **Previous version:** v$CURRENT_VERSION
+          
+          ### Changes
+          
+          EOF
+          
+          if [ -n "$COMMITS" ]; then
+            echo "$COMMITS" | while read line; do
+              echo "- $line" >> CHANGELOG_TEMP.md
+            done
+          else
+            echo "- Version bump from v$CURRENT_VERSION to v$NEW_VERSION" >> CHANGELOG_TEMP.md
+          fi
+          
+          cat >> CHANGELOG_TEMP.md << EOF
+          
+          ### Installation
+          
+          \`\`\`bash
+          git checkout v$NEW_VERSION
+          npm install
+          npm start
+          \`\`\`
+          
+          ### Documentation
+          
+          See [README.md](README.md) for detailed setup and usage instructions.
+          EOF
+          
+          echo "Generated changelog:"
+          cat CHANGELOG_TEMP.md
+          
+          # Set output for GitHub release
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Configure git to use the token for authentication
+          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      - name: Commit version update
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          
+          git add package.json package-lock.json
+          git commit -m "chore(release): bump version to v$NEW_VERSION
+
+          - Update package.json version to $NEW_VERSION
+          - Automated version bump via GitHub Actions
+          
+          Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+
+      - name: Create and push tag
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          
+          echo "Creating tag v$NEW_VERSION"
+          git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION
+
+          Automated release created via GitHub Actions.
+          
+          Version: v$NEW_VERSION
+          Commit: $(git rev-parse HEAD)
+          Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          echo "Pushing changes and tag to origin"
+          git push origin main
+          git push origin "v$NEW_VERSION"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.new_version.outputs.new }}
+          release_name: Release v${{ steps.new_version.outputs.new }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: false
+
+      - name: Upload build artifacts to release
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          
+          # Build for release
+          npm run build
+          
+          # Create release archive
+          tar -czf "claude-code-proxy-v$NEW_VERSION.tar.gz" \
+            dist/ \
+            package.json \
+            package-lock.json \
+            README.md \
+            CLAUDE.md \
+            LICENSE
+          
+          echo "Created release archive: claude-code-proxy-v$NEW_VERSION.tar.gz"
+          ls -la claude-code-proxy-v$NEW_VERSION.tar.gz
+
+      - name: Summary
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.new }}"
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
+          
+          echo "## 🎉 Release Created Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Previous Version | v$CURRENT_VERSION |" >> $GITHUB_STEP_SUMMARY
+          echo "| New Version | **v$NEW_VERSION** |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version Type | ${{ github.event.inputs.version_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`$(git rev-parse --short HEAD)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | \`v$NEW_VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Actions Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Version updated in package.json" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Git tag created and pushed" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] GitHub release created" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Build artifacts generated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**🚀 Release v$NEW_VERSION is now available!**" >> $GITHUB_STEP_SUMMARY
+
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: release
+    if: always()
+    
+    steps:
+      - name: Cleanup temporary files
+        run: |
+          echo "Release workflow completed"
+          echo "Temporary files cleaned up automatically"
