@@ -3,13 +3,14 @@
  */
 
 import { jest } from '@jest/globals';
-import { FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyRequest } from 'fastify';
 import {
   authenticateRequest,
   isAuthEnabled,
   generateSampleApiKey,
   getAuthStatus
 } from '../src/auth';
+import { AuthenticationError } from '../src/errors';
 
 // Mock the logger
 jest.mock('../src/logger', () => ({
@@ -126,7 +127,6 @@ describe('Authentication', () => {
 
   describe('authenticateRequest', () => {
     let mockRequest: Partial<FastifyRequest>;
-    let mockReply: Partial<FastifyReply>;
 
     beforeEach(() => {
       mockRequest = {
@@ -135,38 +135,26 @@ describe('Authentication', () => {
         headers: {},
         ip: '127.0.0.1'
       };
-      mockReply = {
-        code: jest.fn().mockReturnThis() as any,
-        send: jest.fn() as any
-      };
     });
 
     it('should pass when authentication is disabled', async () => {
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
 
     it('should reject when authentication is enabled but no authorization header', async () => {
       process.env.API_KEY = 'sk-test-key';
 
-      await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
-      );
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow(AuthenticationError);
 
-      expect(mockReply.code).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: 'Invalid authentication credentials',
-          type: 'invalid_request_error',
-          code: 'invalid_api_key'
-        }
-      });
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow('API key is required');
     });
 
     it('should reject when authorization header has wrong format', async () => {
@@ -175,19 +163,13 @@ describe('Authentication', () => {
         authorization: 'Basic dXNlcjpwYXNz'
       };
 
-      await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
-      );
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow(AuthenticationError);
 
-      expect(mockReply.code).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: 'Invalid authentication credentials',
-          type: 'invalid_request_error',
-          code: 'invalid_api_key'
-        }
-      });
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow('API key is required');
     });
 
     it('should reject when Bearer token is invalid', async () => {
@@ -196,19 +178,13 @@ describe('Authentication', () => {
         authorization: 'Bearer sk-invalid-key'
       };
 
-      await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
-      );
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow(AuthenticationError);
 
-      expect(mockReply.code).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: 'Invalid authentication credentials',
-          type: 'invalid_request_error',
-          code: 'invalid_api_key'
-        }
-      });
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow('Invalid API key provided');
     });
 
     it('should pass when Bearer token matches API_KEY', async () => {
@@ -218,12 +194,10 @@ describe('Authentication', () => {
       };
 
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
 
     it('should pass when Bearer token matches one of API_KEYS', async () => {
@@ -233,12 +207,10 @@ describe('Authentication', () => {
       };
 
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
 
     it('should handle case-insensitive Bearer prefix', async () => {
@@ -248,12 +220,10 @@ describe('Authentication', () => {
       };
 
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
 
     it('should handle Bearer token with extra whitespace', async () => {
@@ -263,12 +233,10 @@ describe('Authentication', () => {
       };
 
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
 
     it('should work with combined API_KEY and API_KEYS', async () => {
@@ -279,12 +247,10 @@ describe('Authentication', () => {
       };
 
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
 
     it('should reject empty Bearer token', async () => {
@@ -293,19 +259,13 @@ describe('Authentication', () => {
         authorization: 'Bearer '
       };
 
-      await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
-      );
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow(AuthenticationError);
 
-      expect(mockReply.code).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: 'Invalid authentication credentials',
-          type: 'invalid_request_error',
-          code: 'invalid_api_key'
-        }
-      });
+      await expect(authenticateRequest(
+        mockRequest as FastifyRequest
+      )).rejects.toThrow('API key is required');
     });
 
     it('should handle missing user-agent header', async () => {
@@ -316,12 +276,10 @@ describe('Authentication', () => {
       // user-agent is undefined by default
 
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
 
     it('should handle various request context properties', async () => {
@@ -337,12 +295,10 @@ describe('Authentication', () => {
       };
 
       await authenticateRequest(
-        mockRequest as FastifyRequest,
-        mockReply as FastifyReply
+        mockRequest as FastifyRequest
       );
 
-      expect(mockReply.code).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
+      // No exception should be thrown
     });
   });
 });
