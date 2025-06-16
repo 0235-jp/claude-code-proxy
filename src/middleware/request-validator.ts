@@ -59,35 +59,20 @@ export const claudeApiValidationSchema: FastifySchema = {
         type: 'string',
         minLength: 1,
         maxLength: ValidationConstraints.MAX_PROMPT_LENGTH,
-        errorMessage: {
-          minLength: ValidationMessages.EMPTY_PROMPT,
-          maxLength: ValidationMessages.PROMPT_TOO_LONG,
-        },
       },
       'session-id': {
         type: 'string',
         maxLength: ValidationConstraints.MAX_SESSION_ID_LENGTH,
         pattern: ValidationConstraints.SESSION_ID_PATTERN.source,
-        errorMessage: {
-          maxLength: ValidationMessages.SESSION_ID_TOO_LONG,
-          pattern: ValidationMessages.SESSION_ID_INVALID,
-        },
       },
       workspace: {
         type: 'string',
         maxLength: ValidationConstraints.MAX_WORKSPACE_NAME_LENGTH,
         pattern: ValidationConstraints.WORKSPACE_NAME_PATTERN.source,
-        errorMessage: {
-          maxLength: ValidationMessages.WORKSPACE_NAME_TOO_LONG,
-          pattern: ValidationMessages.WORKSPACE_NAME_INVALID,
-        },
       },
       'system-prompt': {
         type: 'string',
         maxLength: ValidationConstraints.MAX_SYSTEM_PROMPT_LENGTH,
-        errorMessage: {
-          maxLength: ValidationMessages.SYSTEM_PROMPT_TOO_LONG,
-        },
       },
       'dangerously-skip-permissions': { type: 'boolean' },
       'allowed-tools': {
@@ -98,9 +83,6 @@ export const claudeApiValidationSchema: FastifySchema = {
           maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
           pattern: ValidationConstraints.TOOL_NAME_PATTERN.source,
         },
-        errorMessage: {
-          maxItems: ValidationMessages.ARRAY_TOO_LONG,
-        },
       },
       'disallowed-tools': {
         type: 'array',
@@ -110,9 +92,6 @@ export const claudeApiValidationSchema: FastifySchema = {
           maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
           pattern: ValidationConstraints.TOOL_NAME_PATTERN.source,
         },
-        errorMessage: {
-          maxItems: ValidationMessages.ARRAY_TOO_LONG,
-        },
       },
       'mcp-allowed-tools': {
         type: 'array',
@@ -121,9 +100,6 @@ export const claudeApiValidationSchema: FastifySchema = {
           type: 'string',
           maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
           pattern: ValidationConstraints.TOOL_NAME_PATTERN.source,
-        },
-        errorMessage: {
-          maxItems: ValidationMessages.ARRAY_TOO_LONG,
         },
       },
     },
@@ -150,21 +126,13 @@ export const openAIApiValidationSchema: FastifySchema = {
             role: {
               type: 'string',
               enum: ['system', 'user', 'assistant'],
-              errorMessage: ValidationMessages.INVALID_MESSAGE_ROLE,
             },
             content: {
               type: 'string',
               minLength: 1,
               maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
-              errorMessage: {
-                minLength: ValidationMessages.EMPTY_MESSAGE_CONTENT,
-                maxLength: ValidationMessages.MESSAGE_CONTENT_TOO_LONG,
-              },
             },
           },
-        },
-        errorMessage: {
-          maxItems: ValidationMessages.ARRAY_TOO_LONG,
         },
       },
       stream: { type: 'boolean' },
