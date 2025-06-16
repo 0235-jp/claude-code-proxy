@@ -20,41 +20,59 @@ export class OpenAITransformer {
       if (messages[i].role === 'assistant') {
         const content = messages[i].content || '';
 
-        const sessionMatch = content.match(/session-id=([a-f0-9-]+)/);
+        const sessionMatch = content.match(/(?:^|\s)session-id=([a-f0-9-]+)/m);
         if (sessionMatch) {
           result.session_id = sessionMatch[1];
           foundSession = true;
         }
 
-        const workspaceMatch = content.match(/workspace=([^\s\n]+)/);
+        const workspaceMatch = content.match(/(?:^|\s)workspace=([^\s\n]+)/m);
         if (workspaceMatch) {
           result.workspace = workspaceMatch[1];
         }
 
-        const dangerMatch = content.match(/dangerously-skip-permissions=(\w+)/);
+        const dangerMatch = content.match(/(?:^|\s)dangerously-skip-permissions=(\w+)/m);
         if (dangerMatch) {
           result.dangerouslySkipPermissions = dangerMatch[1].toLowerCase() === 'true';
         }
 
-        const allowedMatch = content.match(/allowed-tools=\[([^\]]+)\]/);
+        const allowedMatch = content.match(/(?:^|\s)allowed-tools=\[([^\]]*)\]/m);
         if (allowedMatch) {
-          result.allowedTools = allowedMatch[1]
-            .split(',')
-            .map(tool => tool.trim().replace(/['"]/g, ''));
+          const matchContent = allowedMatch[1].trim();
+          if (matchContent) {
+            result.allowedTools = matchContent
+              .split(',')
+              .map(tool => tool.trim().replace(/['"]/g, ''))
+              .filter(tool => tool.length > 0);
+          } else {
+            result.allowedTools = [];
+          }
         }
 
-        const disallowedMatch = content.match(/disallowed-tools=\[([^\]]+)\]/);
+        const disallowedMatch = content.match(/(?:^|\s)disallowed-tools=\[([^\]]*)\]/m);
         if (disallowedMatch) {
-          result.disallowedTools = disallowedMatch[1]
-            .split(',')
-            .map(tool => tool.trim().replace(/['"]/g, ''));
+          const matchContent = disallowedMatch[1].trim();
+          if (matchContent) {
+            result.disallowedTools = matchContent
+              .split(',')
+              .map(tool => tool.trim().replace(/['"]/g, ''))
+              .filter(tool => tool.length > 0);
+          } else {
+            result.disallowedTools = [];
+          }
         }
 
-        const mcpAllowedMatch = content.match(/mcp-allowed-tools=\[([^\]]+)\]/);
+        const mcpAllowedMatch = content.match(/(?:^|\s)mcp-allowed-tools=\[([^\]]*)\]/m);
         if (mcpAllowedMatch) {
-          result.mcpAllowedTools = mcpAllowedMatch[1]
-            .split(',')
-            .map(tool => tool.trim().replace(/['"]/g, ''));
+          const matchContent = mcpAllowedMatch[1].trim();
+          if (matchContent) {
+            result.mcpAllowedTools = matchContent
+              .split(',')
+              .map(tool => tool.trim().replace(/['"]/g, ''))
+              .filter(tool => tool.length > 0);
+          } else {
+            result.mcpAllowedTools = [];
+          }
         }
 
         // Stop at the first assistant message with session info
@@ -74,49 +92,71 @@ export class OpenAITransformer {
   } {
     const config: Partial<SessionInfo> = {};
 
-    const workspaceMatch = userMessage.match(/workspace=([^\s\n]+)/);
+    const workspaceMatch = userMessage.match(/(?:^|\s)workspace=([^\s\n]+)/m);
     if (workspaceMatch) {
       config.workspace = workspaceMatch[1];
     }
 
-    const dangerMatch = userMessage.match(/dangerously-skip-permissions=(\w+)/);
+    const dangerMatch = userMessage.match(/(?:^|\s)dangerously-skip-permissions=(\w+)/m);
     if (dangerMatch) {
       config.dangerouslySkipPermissions = dangerMatch[1].toLowerCase() === 'true';
     }
 
-    const allowedMatch = userMessage.match(/allowed-tools=\[([^\]]+)\]/);
+    const allowedMatch = userMessage.match(/(?:^|\s)allowed-tools=\[([^\]]*)\]/m);
     if (allowedMatch) {
-      config.allowedTools = allowedMatch[1]
-        .split(',')
-        .map(tool => tool.trim().replace(/['"]/g, ''));
+      const content = allowedMatch[1].trim();
+      if (content) {
+        config.allowedTools = content
+          .split(',')
+          .map(tool => tool.trim().replace(/['"]/g, ''))
+          .filter(tool => tool.length > 0);
+      } else {
+        config.allowedTools = [];
+      }
     }
 
-    const disallowedMatch = userMessage.match(/disallowed-tools=\[([^\]]+)\]/);
+    const disallowedMatch = userMessage.match(/(?:^|\s)disallowed-tools=\[([^\]]*)\]/m);
     if (disallowedMatch) {
-      config.disallowedTools = disallowedMatch[1]
-        .split(',')
-        .map(tool => tool.trim().replace(/['"]/g, ''));
+      const content = disallowedMatch[1].trim();
+      if (content) {
+        config.disallowedTools = content
+          .split(',')
+          .map(tool => tool.trim().replace(/['"]/g, ''))
+          .filter(tool => tool.length > 0);
+      } else {
+        config.disallowedTools = [];
+      }
     }
 
-    const mcpAllowedMatch = userMessage.match(/mcp-allowed-tools=\[([^\]]+)\]/);
+    const mcpAllowedMatch = userMessage.match(/(?:^|\s)mcp-allowed-tools=\[([^\]]*)\]/m);
     if (mcpAllowedMatch) {
-      config.mcpAllowedTools = mcpAllowedMatch[1]
-        .split(',')
-        .map(tool => tool.trim().replace(/['"]/g, ''));
+      const content = mcpAllowedMatch[1].trim();
+      if (content) {
+        config.mcpAllowedTools = content
+          .split(',')
+          .map(tool => tool.trim().replace(/['"]/g, ''))
+          .filter(tool => tool.length > 0);
+      } else {
+        config.mcpAllowedTools = [];
+      }
     }
 
     // Extract prompt
-    const promptMatch = userMessage.match(/prompt="([^"]+)"/);
+    const promptMatch = userMessage.match(/(?:^|\s)prompt="([^"]+)"/m);
     let cleanedPrompt: string;
     if (promptMatch) {
       cleanedPrompt = promptMatch[1];
     } else {
       // Remove settings from message
       cleanedPrompt = userMessage
-        .replace(
-          /(workspace=[^\s\n]+|dangerously-skip-permissions=\w+|allowed-tools=\[[^\]]+\]|disallowed-tools=\[[^\]]+\]|mcp-allowed-tools=\[[^\]]+\]|prompt="[^"]+"|prompt=)(\s*)/g,
-          ''
-        )
+        .replace(/(?:^|\s)workspace=[^\s\n]+/gm, '')
+        .replace(/(?:^|\s)dangerously-skip-permissions=\w+/gm, '')
+        .replace(/(?:^|\s)allowed-tools=\[[^\]]*\]/gm, '')
+        .replace(/(?:^|\s)disallowed-tools=\[[^\]]*\]/gm, '')
+        .replace(/(?:^|\s)mcp-allowed-tools=\[[^\]]*\]/gm, '')
+        .replace(/(?:^|\s)prompt="[^"]+"/gm, '')
+        .replace(/(?:^|\s)prompt=/gm, '')
+        .replace(/\s+/g, ' ')
         .trim();
       if (!cleanedPrompt) cleanedPrompt = userMessage;
     }
