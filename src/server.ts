@@ -13,12 +13,25 @@ import { authenticateRequest, getAuthStatus } from './auth';
 import { OpenAITransformer } from './openai-transformer';
 import { StreamProcessor } from './stream-processor';
 import { errorHandler, InvalidRequestError, createStreamingError, ErrorCode } from './errors';
+import {
+  claudeApiValidationSchema,
+  openAIApiValidationSchema,
+  createValidationPreHandler,
+} from './middleware/request-validator';
 
-// Configure Fastify with custom logger
+// Configure Fastify with custom logger and validation
 const server = fastify({
   logger: serverLogger,
   genReqId: () => require('crypto').randomUUID(),
   requestIdHeader: 'x-request-id',
+  ajv: {
+    customOptions: {
+      removeAdditional: false, // Keep additional properties
+      useDefaults: true, // Apply default values
+      coerceTypes: false, // Don't coerce types
+      allErrors: true, // Collect all validation errors
+    },
+  },
 });
 
 /**
@@ -112,23 +125,8 @@ async function startServer(): Promise<void> {
   server.post<{ Body: ClaudeApiRequest }>(
     '/api/claude',
     {
-      preHandler: authenticateRequest,
-      schema: {
-        body: {
-          type: 'object',
-          required: ['prompt'],
-          properties: {
-            prompt: { type: 'string' },
-            'session-id': { type: 'string' },
-            workspace: { type: 'string' },
-            'system-prompt': { type: 'string' },
-            'dangerously-skip-permissions': { type: 'boolean' },
-            'allowed-tools': { type: 'array', items: { type: 'string' } },
-            'disallowed-tools': { type: 'array', items: { type: 'string' } },
-            'mcp-allowed-tools': { type: 'array', items: { type: 'string' } },
-          },
-        },
-      },
+      preHandler: [authenticateRequest, createValidationPreHandler()],
+      schema: claudeApiValidationSchema,
     },
     async (request, reply) => {
       const { prompt, workspace } = request.body;
@@ -225,30 +223,8 @@ async function startServer(): Promise<void> {
   server.post<{ Body: OpenAIRequest }>(
     '/v1/chat/completions',
     {
-      preHandler: authenticateRequest,
-      schema: {
-        body: {
-          type: 'object',
-          required: ['messages'],
-          properties: {
-            model: { type: 'string' },
-            messages: {
-              type: 'array',
-              minItems: 1,
-              items: {
-                type: 'object',
-                properties: {
-                  role: { type: 'string' },
-                  content: { type: 'string' },
-                },
-              },
-            },
-            stream: { type: 'boolean' },
-            temperature: { type: 'number' },
-            max_tokens: { type: 'number' },
-          },
-        },
-      },
+      preHandler: [authenticateRequest, createValidationPreHandler()],
+      schema: openAIApiValidationSchema,
     },
     async (request, reply) => {
       const { messages, stream = true } = request.body;
