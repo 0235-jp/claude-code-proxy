@@ -77,3 +77,6 @@ mcp-config.json
 *.temp
 temp/
 tmp/
+
+# Third-party repositories
+open-webui/

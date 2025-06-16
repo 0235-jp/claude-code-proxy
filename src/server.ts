@@ -4,14 +4,19 @@
 
 import fastify from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
+import * as path from 'path';
 import { executeClaudeAndStream } from './claude-executor';
 import { loadMcpConfig } from './mcp-manager';
 import { performHealthCheck } from './health-checker';
-import { ClaudeApiRequest, OpenAIRequest } from './types';
+import { createWorkspace } from './session-manager';
+import { ClaudeApiRequest, OpenAIRequest, FileUploadRequest } from './types';
 import { serverLogger, createRequestLogger, PerformanceLogger } from './logger';
 import { authenticateRequest, getAuthStatus } from './auth';
 import { OpenAITransformer } from './openai-transformer';
 import { StreamProcessor } from './stream-processor';
+import { fileManager } from './file-manager';
+import { fileProcessor } from './file-processor';
 import { errorHandler, InvalidRequestError, createStreamingError, ErrorCode } from './errors';
 import {
   claudeApiValidationSchema,
@@ -73,6 +78,7 @@ async function startServer(): Promise<void> {
   }
 
   await server.register(cors);
+  await server.register(multipart);
 
   // Use centralized error handler
   server.setErrorHandler(errorHandler.handleError);
@@ -122,6 +128,165 @@ async function startServer(): Promise<void> {
     }
   });
 
+  // OpenAI Files API - Upload file
+  server.post(
+    '/v1/files',
+    {
+      preHandler: [authenticateRequest],
+    },
+    async (request, reply) => {
+      const requestLogger = createRequestLogger('files-api', request.id);
+
+      try {
+        // Get multipart data
+        const data = await request.file();
+        if (!data) {
+          throw new InvalidRequestError(
+            'No file provided',
+            { requestId: request.id },
+            ErrorCode.INVALID_REQUEST
+          );
+        }
+
+        // Read file buffer
+        const buffer = await data.toBuffer();
+        const purposeField = data.fields.purpose;
+        let purpose = 'assistants';
+
+        if (purposeField && typeof purposeField === 'string') {
+          purpose = purposeField;
+        } else if (
+          Array.isArray(purposeField) &&
+          purposeField.length > 0 &&
+          typeof purposeField[0] === 'string'
+        ) {
+          purpose = purposeField[0];
+        }
+
+        const fileUpload: FileUploadRequest = {
+          file: buffer,
+          filename: data.filename,
+          contentType: data.mimetype,
+          purpose,
+        };
+
+        // Create default workspace if needed
+        const workspacePath = await createWorkspace(null);
+
+        // Save file
+        const fileRecord = await fileManager.saveFile(workspacePath, fileUpload);
+        const openAIFile = fileManager.toOpenAIFile(fileRecord, purpose);
+
+        requestLogger.info(
+          {
+            type: 'file_uploaded',
+            fileId: fileRecord.id,
+            filename: fileRecord.filename,
+            size: fileRecord.size,
+          },
+          `File uploaded: ${fileRecord.filename}`
+        );
+
+        reply.send(openAIFile);
+      } catch (error) {
+        requestLogger.error(
+          {
+            type: 'file_upload_error',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+          'Failed to upload file'
+        );
+
+        if (error instanceof InvalidRequestError) {
+          throw error;
+        }
+
+        throw new InvalidRequestError(
+          'File upload failed',
+          { requestId: request.id },
+          ErrorCode.INTERNAL_SERVER_ERROR
+        );
+      }
+    }
+  );
+
+  // OpenAI Files API - Get file metadata
+  server.get<{ Params: { file_id: string } }>(
+    '/v1/files/:file_id',
+    {
+      preHandler: [authenticateRequest],
+    },
+    async (request, reply) => {
+      const { file_id } = request.params;
+      const requestLogger = createRequestLogger('files-api', request.id);
+
+      const fileRecord = fileManager.getFile(file_id);
+      if (!fileRecord) {
+        throw new InvalidRequestError(
+          'File not found',
+          { requestId: request.id, fileId: file_id },
+          ErrorCode.RESOURCE_NOT_FOUND
+        );
+      }
+
+      const openAIFile = fileManager.toOpenAIFile(fileRecord);
+
+      requestLogger.debug(
+        {
+          type: 'file_metadata_retrieved',
+          fileId: file_id,
+        },
+        `File metadata retrieved: ${file_id}`
+      );
+
+      reply.send(openAIFile);
+    }
+  );
+
+  // OpenAI Files API - Get file content
+  server.get<{ Params: { file_id: string } }>(
+    '/v1/files/:file_id/content',
+    {
+      preHandler: [authenticateRequest],
+    },
+    async (request, reply) => {
+      const { file_id } = request.params;
+      const requestLogger = createRequestLogger('files-api', request.id);
+
+      const fileRecord = fileManager.getFile(file_id);
+      if (!fileRecord) {
+        throw new InvalidRequestError(
+          'File not found',
+          { requestId: request.id, fileId: file_id },
+          ErrorCode.RESOURCE_NOT_FOUND
+        );
+      }
+
+      const content = await fileManager.getFileContent(file_id);
+      if (!content) {
+        throw new InvalidRequestError(
+          'File content not accessible',
+          { requestId: request.id, fileId: file_id },
+          ErrorCode.INTERNAL_SERVER_ERROR
+        );
+      }
+
+      requestLogger.debug(
+        {
+          type: 'file_content_retrieved',
+          fileId: file_id,
+          size: content.length,
+        },
+        `File content retrieved: ${file_id}`
+      );
+
+      reply
+        .type(fileRecord.contentType)
+        .header('Content-Disposition', `inline; filename="${fileRecord.filename}"`)
+        .send(content);
+    }
+  );
+
   server.post<{ Body: ClaudeApiRequest }>(
     '/api/claude',
     {
@@ -129,7 +294,7 @@ async function startServer(): Promise<void> {
       schema: claudeApiValidationSchema,
     },
     async (request, reply) => {
-      const { prompt, workspace } = request.body;
+      const { prompt, workspace, files } = request.body;
       const sessionId = request.body['session-id'];
       const systemPrompt = request.body['system-prompt'];
       const allowedTools = request.body['allowed-tools'];
@@ -172,8 +337,39 @@ async function startServer(): Promise<void> {
       reply.hijack();
 
       try {
+        // Process files if provided
+        let finalPrompt = prompt;
+        if (files && files.length > 0) {
+          const workspacePath = await createWorkspace(workspace || null);
+          const processedFiles: string[] = [];
+
+          for (const filePath of files) {
+            // Convert absolute paths to relative paths if needed
+            let relativePath = filePath;
+            if (path.isAbsolute(filePath)) {
+              relativePath = path.relative(workspacePath, filePath);
+              if (!relativePath.startsWith('.')) {
+                relativePath = `./${relativePath}`;
+              }
+            }
+            processedFiles.push(relativePath);
+          }
+
+          // Build prompt with files
+          finalPrompt = fileProcessor.buildPromptWithFiles(prompt, processedFiles);
+
+          requestLogger.info(
+            {
+              type: 'files_processed',
+              fileCount: files.length,
+              files: processedFiles,
+            },
+            `Files processed for Claude API: ${processedFiles.length} files`
+          );
+        }
+
         await executeClaudeAndStream(
-          prompt,
+          finalPrompt,
           sessionId || null,
           {
             ...(workspace && { workspace }),
@@ -238,7 +434,8 @@ async function startServer(): Promise<void> {
       }
 
       // Convert OpenAI request to Claude API parameters
-      const { prompt, systemPrompt, sessionInfo } = OpenAITransformer.convertRequest(request.body);
+      const { prompt, systemPrompt, sessionInfo, filePaths } =
+        await OpenAITransformer.convertRequest(request.body);
       const {
         session_id,
         workspace,
@@ -266,9 +463,11 @@ async function startServer(): Promise<void> {
             disallowedToolsCount: disallowedTools?.length || 0,
             mcpAllowedToolsCount: mcpAllowedTools?.length || 0,
             messagesCount: messages?.length || 0,
+            fileCount: filePaths?.length || 0,
             allowedTools: allowedTools || [],
             disallowedTools: disallowedTools || [],
             mcpAllowedTools: mcpAllowedTools || [],
+            files: filePaths || [],
           },
           type: 'api_request',
         },

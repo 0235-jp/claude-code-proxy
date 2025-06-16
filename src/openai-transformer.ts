@@ -3,6 +3,10 @@
  */
 
 import { OpenAIMessage, OpenAIRequest, SessionInfo } from './types';
+import { fileProcessor } from './file-processor';
+import { fileManager } from './file-manager';
+import { createWorkspace } from './session-manager';
+import { serverLogger } from './logger';
 
 /**
  * Handles transformation between OpenAI and Claude API formats
@@ -18,7 +22,11 @@ export class OpenAITransformer {
     // Start from the end and work backwards to find the most recent assistant message
     for (let i = messages.length - 2; i >= 0; i--) {
       if (messages[i].role === 'assistant') {
-        const content = messages[i].content || '';
+        const messageContent = messages[i].content;
+        if (typeof messageContent !== 'string') {
+          continue; // Skip non-string content
+        }
+        const content = messageContent;
 
         const sessionMatch = content.match(/(?:^|\s)session-id=([a-f0-9-]+)/m);
         if (sessionMatch) {
@@ -165,25 +173,111 @@ export class OpenAITransformer {
   }
 
   /**
+   * Process files from OpenAI request and convert to file paths
+   */
+  static async processFiles(
+    openAIRequest: OpenAIRequest,
+    workspacePath: string
+  ): Promise<string[]> {
+    const filePaths: string[] = [];
+
+    try {
+      // Process image_url content from messages
+      for (const message of openAIRequest.messages) {
+        if (message.role === 'user' && Array.isArray(message.content)) {
+          const imageUrls = fileProcessor.extractImageUrls(message.content);
+
+          for (const imageUrl of imageUrls) {
+            const fileUpload = await fileProcessor.processFileInput(imageUrl);
+            const fileRecord = await fileManager.saveFile(workspacePath, fileUpload);
+            const relativePath = fileManager.getRelativeFilePath(fileRecord, workspacePath);
+            filePaths.push(relativePath);
+
+            serverLogger.info(
+              {
+                type: 'image_processed',
+                fileId: fileRecord.id,
+                filename: fileRecord.filename,
+                source: 'image_url',
+              },
+              `Image processed from image_url: ${fileRecord.filename}`
+            );
+          }
+        }
+      }
+
+      // Process files parameter (OpenWebUI extension)
+      if (openAIRequest.files) {
+        for (const fileRef of openAIRequest.files) {
+          const fileRecord = fileManager.getFile(fileRef.id);
+          if (fileRecord) {
+            const relativePath = fileManager.getRelativeFilePath(fileRecord, workspacePath);
+            filePaths.push(relativePath);
+
+            serverLogger.debug(
+              {
+                type: 'file_referenced',
+                fileId: fileRef.id,
+                filename: fileRef.name,
+              },
+              `File referenced: ${fileRef.name}`
+            );
+          } else {
+            serverLogger.warn(
+              {
+                type: 'file_not_found',
+                fileId: fileRef.id,
+                filename: fileRef.name,
+              },
+              `Referenced file not found: ${fileRef.id}`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      serverLogger.error(
+        {
+          type: 'file_processing_error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        'Failed to process files from OpenAI request'
+      );
+      throw error;
+    }
+
+    return filePaths;
+  }
+
+  /**
    * Convert OpenAI request to Claude API parameters
    */
-  static convertRequest(openAIRequest: OpenAIRequest): {
+  static async convertRequest(openAIRequest: OpenAIRequest): Promise<{
     prompt: string;
     systemPrompt: string | null;
     sessionInfo: Partial<SessionInfo>;
-  } {
+    filePaths: string[];
+  }> {
     const { messages } = openAIRequest;
 
     // Extract system prompt
     let systemPrompt: string | null = null;
     let messageStartIndex = 0;
     if (messages.length > 0 && messages[0].role === 'system') {
-      systemPrompt = messages[0].content;
+      systemPrompt =
+        typeof messages[0].content === 'string'
+          ? messages[0].content
+          : fileProcessor.extractTextContent(messages[0].content);
       messageStartIndex = 1;
     }
 
-    // Get the latest user message
-    const userMessage = messages[messages.length - 1]?.content || '';
+    // Get the latest user message and extract text content
+    const lastMessage = messages[messages.length - 1];
+    const userMessage =
+      lastMessage?.role === 'user'
+        ? typeof lastMessage.content === 'string'
+          ? lastMessage.content
+          : fileProcessor.extractTextContent(lastMessage.content)
+        : '';
 
     // Extract session info from previous messages
     const previousSessionInfo = this.extractSessionInfo(messages.slice(messageStartIndex));
@@ -197,10 +291,20 @@ export class OpenAITransformer {
       ...currentConfig,
     };
 
+    // Create workspace for file processing
+    const workspacePath = await createWorkspace(sessionInfo.workspace || null);
+
+    // Process files from the request
+    const filePaths = await this.processFiles(openAIRequest, workspacePath);
+
+    // Build final prompt with file paths
+    const finalPrompt = fileProcessor.buildPromptWithFiles(cleanedPrompt, filePaths);
+
     return {
-      prompt: cleanedPrompt,
+      prompt: finalPrompt,
       systemPrompt,
       sessionInfo,
+      filePaths,
     };
   }
 
