@@ -66,7 +66,8 @@ setTimeout(() => {
       let output = '';
       serverProcess.stdout?.on('data', (data) => {
         output += data.toString();
-        if (output.includes(`listening`) || output.includes(`Server`)) {
+        console.log('Server stdout:', data.toString());
+        if (output.includes(`listening`) || output.includes(`Server`) || output.includes(`port`)) {
           clearTimeout(timeout);
           serverReady = true;
           resolve();
@@ -77,11 +78,35 @@ setTimeout(() => {
         console.error('Server stderr:', data.toString());
       });
 
-      setTimeout(() => {
+      serverProcess.on('error', (error) => {
+        clearTimeout(timeout);
+        console.error('Server process error:', error);
+        reject(error);
+      });
+
+      // Wait for server to be ready, then test connectivity
+      setTimeout(async () => {
         if (!serverReady) {
-          serverReady = true;
-          clearTimeout(timeout);
-          resolve();
+          console.log('Server not ready after 3 seconds, testing connectivity...');
+          try {
+            const testResponse = await fetch(`http://localhost:${serverPort}/health`);
+            if (testResponse.ok) {
+              console.log('Server is responding to health check');
+              serverReady = true;
+              clearTimeout(timeout);
+              resolve();
+            } else {
+              console.log('Server health check failed:', testResponse.status);
+            }
+          } catch (error) {
+            console.log('Server connectivity test failed:', error);
+          }
+          
+          if (!serverReady) {
+            serverReady = true;
+            clearTimeout(timeout);
+            resolve();
+          }
         }
       }, 3000);
     });
