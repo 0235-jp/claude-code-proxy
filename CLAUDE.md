@@ -64,6 +64,60 @@ curl -X POST http://localhost:8080/api/claude \
   -d '{"prompt": "List files"}'
 ```
 
+## Testing Requirements
+
+**IMPORTANT**: Before making any changes to the server code, especially OpenAI API compatibility features, you MUST run both unit tests and E2E tests to ensure proper functionality.
+
+### Required Test Commands
+
+```bash
+# 1. ALWAYS run unit tests first
+npm run test:unit
+
+# 2. ALWAYS run type checking and linting
+npm run type-check
+npm run lint
+
+# 3. ALWAYS run E2E tests for OpenAI compatibility
+npm run test:e2e:openai
+npm run test:e2e:python
+npm run test:e2e:nodejs
+
+# 4. Run all E2E tests together
+npm run test:e2e:all
+
+# 5. For comprehensive testing (CI equivalent)
+npm run ci:full
+```
+
+### Critical Testing Areas
+
+- **OpenAI API Compatibility**: The `/v1/chat/completions` endpoint must maintain full compatibility with OpenAI client libraries
+- **Streaming Responses**: Server-Sent Events (SSE) format must be correct and properly formatted
+- **Authentication**: Bearer token validation and session management
+- **Error Handling**: Proper OpenAI-compatible error responses
+- **Client Library Integration**: Real-world usage patterns from Python and Node.js OpenAI clients
+
+### Manual Testing Verification
+
+After running automated tests, manually verify with curl:
+
+```bash
+# Test OpenAI endpoint streaming
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}' \
+  | head -20
+
+# Verify SSE format
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Test"}], "stream": true}' \
+  | grep "data:" | head -5
+```
+
+**Never skip E2E tests when modifying OpenAI compatibility features!**
+
 ## Architecture Overview
 
 ### Core Components
