@@ -102,6 +102,14 @@ export const claudeApiValidationSchema: FastifySchema = {
           pattern: ValidationConstraints.TOOL_NAME_PATTERN.source,
         },
       },
+      files: {
+        type: 'array',
+        maxItems: ValidationConstraints.MAX_ARRAY_LENGTH,
+        items: {
+          type: 'string',
+          maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
+        },
+      },
     },
   },
 };
@@ -128,9 +136,44 @@ export const openAIApiValidationSchema: FastifySchema = {
               enum: ['system', 'user', 'assistant'],
             },
             content: {
-              type: 'string',
-              minLength: 1,
-              maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
+              oneOf: [
+                {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
+                },
+                {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['type'],
+                    properties: {
+                      type: {
+                        type: 'string',
+                        enum: ['text', 'image_url'],
+                      },
+                      text: {
+                        type: 'string',
+                        maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
+                      },
+                      image_url: {
+                        type: 'object',
+                        required: ['url'],
+                        properties: {
+                          url: {
+                            type: 'string',
+                            maxLength: ValidationConstraints.MAX_MESSAGE_CONTENT_LENGTH,
+                          },
+                          detail: {
+                            type: 'string',
+                            enum: ['low', 'high', 'auto'],
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              ],
             },
           },
         },
@@ -145,6 +188,23 @@ export const openAIApiValidationSchema: FastifySchema = {
         type: 'number',
         minimum: 1,
         maximum: 1000000,
+      },
+      files: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['id', 'name'],
+          properties: {
+            id: {
+              type: 'string',
+              maxLength: ValidationConstraints.MAX_TOOL_NAME_LENGTH,
+            },
+            name: {
+              type: 'string',
+              maxLength: ValidationConstraints.MAX_WORKSPACE_NAME_LENGTH,
+            },
+          },
+        },
       },
     },
   },
@@ -179,11 +239,22 @@ export async function performCustomValidation(request: FastifyRequest): Promise<
 
   // Example: Validate combined message length for OpenAI endpoint
   if (request.url === '/v1/chat/completions' && body.messages) {
-    const messages = body.messages as { content?: string }[];
-    const totalLength = messages.reduce(
-      (sum: number, msg: { content?: string }) => sum + (msg.content?.length || 0),
-      0
-    );
+    const messages = body.messages as {
+      content?: string | Array<{ type: string; text?: string }>;
+    }[];
+    const totalLength = messages.reduce((sum: number, msg) => {
+      if (typeof msg.content === 'string') {
+        return sum + msg.content.length;
+      } else if (Array.isArray(msg.content)) {
+        return (
+          sum +
+          msg.content.reduce((contentSum, item) => {
+            return contentSum + (item.text?.length || 0);
+          }, 0)
+        );
+      }
+      return sum;
+    }, 0);
 
     if (totalLength > ValidationConstraints.MAX_PROMPT_LENGTH) {
       validationErrors.push({
