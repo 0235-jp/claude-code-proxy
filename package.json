@@ -8,6 +8,7 @@
     "dotenv": "^16.x",
     "fastify": "^4.x",
     "file-type": "^21.0.0",
+    "load-esm": "^1.0.2",
     "pino": "^8.x",
     "uuid": "^11.1.0"
   },

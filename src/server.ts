@@ -8,7 +8,7 @@ import multipart from '@fastify/multipart';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
-import { fileTypeFromBuffer } from 'file-type';
+import { loadEsm } from 'load-esm';
 import { executeClaudeAndStream } from './claude-executor';
 import { loadMcpConfig } from './mcp-manager';
 import { performHealthCheck } from './health-checker';
@@ -31,7 +31,8 @@ import {
  */
 async function detectFileExtension(fileData: Buffer): Promise<string> {
   try {
-    // Use file-type library to detect file type from magic numbers
+    // Use load-esm to import ESM-only file-type library
+    const { fileTypeFromBuffer } = await loadEsm<typeof import('file-type')>('file-type');
     const detectedType = await fileTypeFromBuffer(fileData);
     if (detectedType) {
       return `.${detectedType.ext}`;
