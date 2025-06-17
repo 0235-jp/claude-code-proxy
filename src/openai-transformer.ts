@@ -185,10 +185,14 @@ export class OpenAITransformer {
     const filePaths: string[] = [];
 
     try {
-      // Process message content for files and images
-      for (const message of openAIRequest.messages) {
-        if (message.role === 'user' && Array.isArray(message.content)) {
-          for (const contentPart of message.content) {
+      // Process message content for files and images from the last user message only
+      const lastUserMessage = openAIRequest.messages
+        .slice()
+        .reverse()
+        .find(msg => msg.role === 'user');
+      
+      if (lastUserMessage && Array.isArray(lastUserMessage.content)) {
+        for (const contentPart of lastUserMessage.content) {
             if (contentPart.type === 'image_url' && contentPart.image_url) {
               // Process image_url (existing functionality)
               const fileUpload = await fileProcessor.processFileInput(contentPart.image_url.url);
@@ -277,7 +281,6 @@ export class OpenAITransformer {
                 );
               }
             }
-          }
         }
       }
     } catch (error) {
