@@ -60,6 +60,7 @@ export interface SessionInfo {
   allowedTools?: string[];
   disallowedTools?: string[];
   mcpAllowedTools?: string[];
+  showThinking?: boolean;
 }
 
 export interface StreamJsonData {

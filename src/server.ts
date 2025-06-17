@@ -410,8 +410,9 @@ async function startServer(): Promise<void> {
         return;
       }
 
-      // Create stream processor
-      const streamProcessor = new StreamProcessor();
+      // Create stream processor with thinking setting
+      const showThinking = sessionInfo.showThinking === true; // Default to false
+      const streamProcessor = new StreamProcessor(100, showThinking);
       const originalWrite = reply.raw.write;
       const originalEnd = reply.raw.end;
 
