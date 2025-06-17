@@ -12,6 +12,8 @@ Claude Code Proxy is a Fastify-based HTTP proxy server that wraps the Claude Cod
 ## Features
 
 - **Streaming API**: Real-time Claude Code responses via Server-Sent Events
+- **File & Image Support**: Comprehensive file processing with 200+ format support
+- **External Document Loader**: OpenWebUI integration for seamless file uploads
 - **Authentication**: Optional Bearer token authentication (OpenAI-compatible)
 - **Health Monitoring**: Built-in health check endpoint for system monitoring
 - **Workspace Management**: Isolated workspaces with custom naming or shared workspace
@@ -25,9 +27,11 @@ Claude Code Proxy is a Fastify-based HTTP proxy server that wraps the Claude Cod
 ## Tech Stack
 
 - **TypeScript** - Type-safe JavaScript development
-- **Fastify** - Web framework
+- **Fastify** - Web framework with multipart support
 - **Claude Code CLI** - v1.0.18+ with MCP support
 - **Node.js** - Runtime environment
+- **file-type** - Magic number based file format detection
+- **load-esm** - ESM module compatibility for CommonJS projects
 - **MCP (Model Context Protocol)** - External data source integration
 - **Pino** - Structured logging
 - **ESLint + Prettier** - Code quality and formatting
@@ -43,6 +47,8 @@ claude-code-proxy/
 ├── src/
 │   ├── server.ts           # Fastify server with API endpoints
 │   ├── claude-executor.ts  # Claude Code execution with MCP support
+│   ├── file-processor.ts   # File and image processing utilities
+│   ├── openai-transformer.ts # OpenAI API compatibility layer
 │   ├── session-manager.ts  # Workspace management
 │   ├── mcp-manager.ts      # MCP configuration handling
 │   ├── health-checker.ts   # Health monitoring system
@@ -198,6 +204,55 @@ Content-Type: text/event-stream
 data: {"type":"system","subtype":"init","session_id":"abc123","tools":["Task","Bash"],"mcp_servers":["github","deepwiki"]}
 
 data: {"type":"assistant","message":{"content":[{"type":"text","text":"I'll help you analyze this repository..."}]}}
+```
+
+### PUT /process (External Document Loader)
+
+OpenWebUI integration endpoint for uploading files to be processed by Claude Code. Saves files locally and returns file paths for Claude to access.
+
+**Request:**
+- **Method**: PUT
+- **Content-Type**: Any binary format (application/pdf, image/*, text/*, etc.)
+- **Body**: Raw binary file data
+
+**Headers:**
+```
+Content-Type: application/pdf  # Optional, auto-detected from magic numbers
+Authorization: Bearer sk-your-api-key-here  # Required if authentication is enabled
+```
+
+**Response:**
+```json
+{
+  "page_content": "/path/to/workspace/files/12345678-1234-1234-1234-123456789abc.pdf",
+  "metadata": {
+    "source": "document.pdf"
+  }
+}
+```
+
+**File Storage:**
+- Files saved to `{workspace_base}/files/` directory
+- UUID-based naming prevents conflicts: `{uuid}{extension}`
+- Automatic file type detection from binary signatures
+- Absolute file paths returned for Claude Code access
+
+**Usage with OpenWebUI:**
+1. Configure OpenWebUI's External Document Loader URL: `http://localhost:3000`
+2. **Enable "Bypass Embedding and Retrieval"** in OpenWebUI:
+   - Go to Admin Settings → Documents → General
+   - Enable "Bypass Embedding and Retrieval" (Full Context Mode)
+   - This ensures files bypass OpenWebUI's RAG pipeline and are sent directly to Claude Code
+3. Upload files through OpenWebUI interface
+4. Files automatically appear in Claude Code prompts via `<source>` tags
+5. Claude Code can read, analyze, and process the uploaded files with full context
+
+**Example curl usage:**
+```bash
+curl -X PUT http://localhost:3000/process \
+  -H "Content-Type: application/pdf" \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  --data-binary @document.pdf
 ```
 
 ## MCP (Model Context Protocol) Support

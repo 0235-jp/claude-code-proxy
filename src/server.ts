@@ -2,16 +2,23 @@
  * Main Fastify server with dual API endpoints for Claude Code
  */
 
-import fastify from 'fastify';
+import fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import { v4 as uuidv4 } from 'uuid';
+import { loadEsm } from 'load-esm';
 import { executeClaudeAndStream } from './claude-executor';
 import { loadMcpConfig } from './mcp-manager';
 import { performHealthCheck } from './health-checker';
+import { createWorkspace } from './session-manager';
 import { ClaudeApiRequest, OpenAIRequest } from './types';
 import { serverLogger, createRequestLogger, PerformanceLogger } from './logger';
 import { authenticateRequest, getAuthStatus } from './auth';
 import { OpenAITransformer } from './openai-transformer';
 import { StreamProcessor } from './stream-processor';
+import { fileProcessor } from './file-processor';
 import { errorHandler, InvalidRequestError, createStreamingError, ErrorCode } from './errors';
 import {
   claudeApiValidationSchema,
@@ -19,11 +26,64 @@ import {
   createValidationPreHandler,
 } from './middleware/request-validator';
 
+// Cache for file-type module to avoid repeated dynamic imports
+let fileTypeFromBuffer: ((buffer: Buffer) => Promise<any>) | null = null;
+
+/**
+ * Initialize file-type module once during server startup
+ */
+async function initializeFileType(): Promise<void> {
+  try {
+    const { fileTypeFromBuffer: ftfb } = await loadEsm<typeof import('file-type')>('file-type');
+    fileTypeFromBuffer = ftfb;
+    serverLogger.info(
+      {
+        type: 'file_type_initialized',
+      },
+      'file-type module initialized successfully'
+    );
+  } catch (error) {
+    serverLogger.error(
+      {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        type: 'file_type_init_error',
+      },
+      'Failed to initialize file-type module'
+    );
+  }
+}
+
+/**
+ * Detect file extension using file-type library
+ */
+async function detectFileExtension(fileData: Buffer): Promise<string> {
+  try {
+    // Use cached file-type module, initialize if not available
+    if (!fileTypeFromBuffer) {
+      await initializeFileType();
+    }
+
+    if (fileTypeFromBuffer) {
+      const detectedType = await fileTypeFromBuffer(fileData);
+      if (detectedType) {
+        return `.${detectedType.ext}`;
+      }
+    }
+  } catch (error) {
+    // If file-type fails, continue with fallback
+  }
+
+  // If file-type can't detect it, assume it's a text file and use .txt
+  // This is safer than .unknown and Claude can still read it
+  return '.txt';
+}
+
 // Configure Fastify with custom logger and validation
 const server = fastify({
   logger: serverLogger,
   genReqId: () => require('crypto').randomUUID(),
   requestIdHeader: 'x-request-id',
+  bodyLimit: 1048576 * 1000 * 1000 * 1000, // ~1000TB limit for personal use
   ajv: {
     customOptions: {
       removeAdditional: false, // Keep additional properties
@@ -73,12 +133,34 @@ async function startServer(): Promise<void> {
   }
 
   await server.register(cors);
+  await server.register(multipart, {
+    limits: {
+      fieldNameSize: 1000000, // 1M characters
+      fieldSize: 1048576 * 1000 * 1000 * 1000, // ~1000TB
+      fields: 100000, // 100k fields
+      fileSize: 1048576 * 1000 * 1000 * 1000, // ~1000TB
+      files: 100000, // 100k files
+      headerPairs: 1000000, // 1M header pairs
+    },
+  });
+
+  // Add content type parser for binary files (External Document Loader)
+  server.addContentTypeParser(
+    '*',
+    { parseAs: 'buffer' },
+    async (_req: FastifyRequest, body: Buffer) => {
+      return body;
+    }
+  );
 
   // Use centralized error handler
   server.setErrorHandler(errorHandler.handleError);
 
   // Load MCP configuration on startup
   await loadMcpConfig();
+
+  // Initialize file-type module for optimal performance
+  await initializeFileType();
 
   // Health check endpoint
   server.get('/health', async (_request, reply) => {
@@ -129,7 +211,7 @@ async function startServer(): Promise<void> {
       schema: claudeApiValidationSchema,
     },
     async (request, reply) => {
-      const { prompt, workspace } = request.body;
+      const { prompt, workspace, files } = request.body;
       const sessionId = request.body['session-id'];
       const systemPrompt = request.body['system-prompt'];
       const allowedTools = request.body['allowed-tools'];
@@ -172,8 +254,36 @@ async function startServer(): Promise<void> {
       reply.hijack();
 
       try {
+        // Process files if provided
+        let finalPrompt = prompt;
+        if (files && files.length > 0) {
+          const workspacePath = await createWorkspace(workspace || null);
+          const processedFiles: string[] = [];
+
+          for (const filePath of files) {
+            // Use absolute paths for Claude
+            let absolutePath = filePath;
+            if (!path.isAbsolute(filePath)) {
+              absolutePath = path.resolve(workspacePath, filePath);
+            }
+            processedFiles.push(absolutePath);
+          }
+
+          // Build prompt with files
+          finalPrompt = fileProcessor.buildPromptWithFiles(prompt, processedFiles);
+
+          requestLogger.info(
+            {
+              type: 'files_processed',
+              fileCount: files.length,
+              files: processedFiles,
+            },
+            `Files processed for Claude API: ${processedFiles.length} files`
+          );
+        }
+
         await executeClaudeAndStream(
-          prompt,
+          finalPrompt,
           sessionId || null,
           {
             ...(workspace && { workspace }),
@@ -238,7 +348,8 @@ async function startServer(): Promise<void> {
       }
 
       // Convert OpenAI request to Claude API parameters
-      const { prompt, systemPrompt, sessionInfo } = OpenAITransformer.convertRequest(request.body);
+      const { prompt, systemPrompt, sessionInfo, filePaths } =
+        await OpenAITransformer.convertRequest(request.body);
       const {
         session_id,
         workspace,
@@ -266,9 +377,11 @@ async function startServer(): Promise<void> {
             disallowedToolsCount: disallowedTools?.length || 0,
             mcpAllowedToolsCount: mcpAllowedTools?.length || 0,
             messagesCount: messages?.length || 0,
+            fileCount: filePaths?.length || 0,
             allowedTools: allowedTools || [],
             disallowedTools: disallowedTools || [],
             mcpAllowedTools: mcpAllowedTools || [],
+            files: filePaths || [],
           },
           type: 'api_request',
         },
@@ -379,6 +492,122 @@ async function startServer(): Promise<void> {
             'Failed to write error response'
           );
           reply.raw.destroy();
+        }
+      }
+    }
+  );
+
+  // External Document Loader endpoint for OpenWebUI integration
+  server.put(
+    '/process',
+    {
+      preHandler: [authenticateRequest, createValidationPreHandler()],
+    },
+    async (request, reply) => {
+      const requestLogger = createRequestLogger('external-doc-loader', request.id);
+      const perfLogger = new PerformanceLogger(requestLogger, 'external-doc-loader-request');
+
+      try {
+        // Get the raw body as Buffer
+        const fileData = request.body as Buffer;
+
+        if (!fileData || fileData.length === 0) {
+          throw new InvalidRequestError(
+            'No file data provided',
+            { requestId: request.id, endpoint: '/process' },
+            ErrorCode.INVALID_REQUEST
+          );
+        }
+
+        // Determine file extension from magic numbers (file signature)
+        const fileExtension = await detectFileExtension(fileData);
+
+        // Create files directory in workspace base
+        const workspaceBasePath = process.env.WORKSPACE_BASE_PATH || process.cwd();
+        const filesDirectory = path.join(workspaceBasePath, 'files');
+
+        try {
+          await fs.mkdir(filesDirectory, { recursive: true });
+        } catch (mkdirError) {
+          requestLogger.error(
+            {
+              error: mkdirError instanceof Error ? mkdirError.message : 'Unknown error',
+              filesDirectory,
+              type: 'directory_creation_error',
+            },
+            'Failed to create files directory'
+          );
+          throw new Error('Failed to create files directory');
+        }
+
+        // Generate unique filename with UUID
+        const fileId = uuidv4();
+        const fileName = `${fileId}${fileExtension}`;
+        const filePath = path.join(filesDirectory, fileName);
+
+        // Save file to disk
+        try {
+          await fs.writeFile(filePath, fileData);
+        } catch (writeError) {
+          requestLogger.error(
+            {
+              error: writeError instanceof Error ? writeError.message : 'Unknown error',
+              filePath,
+              fileSize: fileData.length,
+              type: 'file_write_error',
+            },
+            'Failed to write file to disk'
+          );
+          throw new Error('Failed to save file');
+        }
+
+        // Create filename for source display (without UUID for cleaner display)
+        const displayFileName = `document${fileExtension}`;
+
+        requestLogger.info(
+          {
+            type: 'file_saved',
+            filePath,
+            fileSize: fileData.length,
+            contentType: request.headers['content-type'] || 'application/octet-stream',
+            fileId,
+            displayFileName,
+          },
+          `External document saved: ${fileName}`
+        );
+
+        // Return response in OpenWebUI External Document Loader format
+        const response = {
+          page_content: filePath,
+          metadata: {
+            source: displayFileName,
+          },
+        };
+
+        perfLogger.finish('success');
+        reply.send(response);
+      } catch (error) {
+        requestLogger.error(
+          {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            type: 'external_doc_loader_error',
+          },
+          'External Document Loader request failed'
+        );
+        perfLogger.finish('error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        if (error instanceof InvalidRequestError) {
+          reply.code(400).send({
+            error: 'Bad Request',
+            message: error.message,
+          });
+        } else {
+          reply.code(500).send({
+            error: 'Internal Server Error',
+            message: 'Failed to process document',
+          });
         }
       }
     }

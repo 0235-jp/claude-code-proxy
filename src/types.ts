@@ -20,11 +20,25 @@ export interface ClaudeApiRequest {
   'allowed-tools'?: string[];
   'disallowed-tools'?: string[];
   'mcp-allowed-tools'?: string[];
+  files?: string[];
 }
 
 export interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content:
+    | string
+    | Array<{
+        type: 'text' | 'image_url' | 'file';
+        text?: string;
+        image_url?: {
+          url: string;
+          detail?: 'low' | 'high' | 'auto';
+        };
+        file?: {
+          file_data: string; // base64 encoded file data
+          filename?: string;
+        };
+      }>;
 }
 
 export interface OpenAIRequest {

@@ -3,6 +3,12 @@
  */
 
 import { OpenAIMessage, OpenAIRequest, SessionInfo } from './types';
+import { fileProcessor } from './file-processor';
+import { createWorkspace } from './session-manager';
+import { serverLogger } from './logger';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Handles transformation between OpenAI and Claude API formats
@@ -18,7 +24,11 @@ export class OpenAITransformer {
     // Start from the end and work backwards to find the most recent assistant message
     for (let i = messages.length - 2; i >= 0; i--) {
       if (messages[i].role === 'assistant') {
-        const content = messages[i].content || '';
+        const messageContent = messages[i].content;
+        if (typeof messageContent !== 'string') {
+          continue; // Skip non-string content
+        }
+        const content = messageContent;
 
         const sessionMatch = content.match(/(?:^|\s)session-id=([a-f0-9-]+)/m);
         if (sessionMatch) {
@@ -165,25 +175,143 @@ export class OpenAITransformer {
   }
 
   /**
+   * Process files from OpenAI request and convert to file paths
+   */
+  static async processFiles(
+    openAIRequest: OpenAIRequest,
+    workspacePath: string
+  ): Promise<string[]> {
+    const filePaths: string[] = [];
+
+    try {
+      // Process message content for files and images
+      for (const message of openAIRequest.messages) {
+        if (message.role === 'user' && Array.isArray(message.content)) {
+          for (const contentPart of message.content) {
+            if (contentPart.type === 'image_url' && contentPart.image_url) {
+              // Process image_url (existing functionality)
+              const fileUpload = await fileProcessor.processFileInput(contentPart.image_url.url);
+              const fileId = uuidv4();
+              const filename = `image_${fileId}.${this.getImageExtension(contentPart.image_url.url)}`;
+              const filePath = path.join(workspacePath, filename);
+
+              await fs.writeFile(filePath, fileUpload.file);
+              filePaths.push(filePath);
+
+              serverLogger.info(
+                {
+                  type: 'image_processed',
+                  filename,
+                  source: 'image_url',
+                  size: fileUpload.file.length,
+                },
+                `Image processed from image_url: ${filename}`
+              );
+            } else if (contentPart.type === 'file' && contentPart.file) {
+              // Process file content part (new functionality)
+              const { file_data, filename } = contentPart.file;
+
+              if (!file_data) {
+                serverLogger.warn(
+                  {
+                    type: 'file_data_missing',
+                    filename,
+                  },
+                  'File content part missing file_data'
+                );
+                continue;
+              }
+
+              try {
+                // Decode base64 file data
+                const fileBuffer = Buffer.from(file_data, 'base64');
+                const fileId = uuidv4();
+                const safeFilename = filename || `file_${fileId}`;
+                const filePath = path.join(workspacePath, safeFilename);
+
+                await fs.writeFile(filePath, fileBuffer);
+                filePaths.push(filePath);
+
+                serverLogger.info(
+                  {
+                    type: 'file_processed',
+                    filename: safeFilename,
+                    source: 'file_data',
+                    size: fileBuffer.length,
+                  },
+                  `File processed from file_data: ${safeFilename}`
+                );
+              } catch (error) {
+                serverLogger.error(
+                  {
+                    type: 'file_data_decode_error',
+                    filename,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                  },
+                  `Failed to decode file_data for: ${filename}`
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      serverLogger.error(
+        {
+          type: 'file_processing_error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        'Failed to process files from OpenAI request'
+      );
+      throw error;
+    }
+
+    return filePaths;
+  }
+
+  /**
+   * Get file extension from image URL or data URL
+   */
+  private static getImageExtension(url: string): string {
+    if (url.startsWith('data:image/')) {
+      const match = url.match(/data:image\/([^;]+)/);
+      return match ? match[1] : 'png';
+    }
+
+    const extension = path.extname(url).slice(1).toLowerCase();
+    return extension || 'png';
+  }
+
+  /**
    * Convert OpenAI request to Claude API parameters
    */
-  static convertRequest(openAIRequest: OpenAIRequest): {
+  static async convertRequest(openAIRequest: OpenAIRequest): Promise<{
     prompt: string;
     systemPrompt: string | null;
     sessionInfo: Partial<SessionInfo>;
-  } {
+    filePaths: string[];
+  }> {
     const { messages } = openAIRequest;
 
     // Extract system prompt
     let systemPrompt: string | null = null;
     let messageStartIndex = 0;
     if (messages.length > 0 && messages[0].role === 'system') {
-      systemPrompt = messages[0].content;
+      systemPrompt =
+        typeof messages[0].content === 'string'
+          ? messages[0].content
+          : fileProcessor.extractTextContent(messages[0].content);
       messageStartIndex = 1;
     }
 
-    // Get the latest user message
-    const userMessage = messages[messages.length - 1]?.content || '';
+    // Get the latest user message and extract text content
+    const lastMessage = messages[messages.length - 1];
+    const userMessage =
+      lastMessage?.role === 'user'
+        ? typeof lastMessage.content === 'string'
+          ? lastMessage.content
+          : fileProcessor.extractTextContent(lastMessage.content)
+        : '';
 
     // Extract session info from previous messages
     const previousSessionInfo = this.extractSessionInfo(messages.slice(messageStartIndex));
@@ -197,10 +325,20 @@ export class OpenAITransformer {
       ...currentConfig,
     };
 
+    // Create workspace for file processing
+    const workspacePath = await createWorkspace(sessionInfo.workspace || null);
+
+    // Process files from the request
+    const filePaths = await this.processFiles(openAIRequest, workspacePath);
+
+    // Build final prompt with file paths
+    const finalPrompt = fileProcessor.buildPromptWithFiles(cleanedPrompt, filePaths);
+
     return {
-      prompt: cleanedPrompt,
+      prompt: finalPrompt,
       systemPrompt,
       sessionInfo,
+      filePaths,
     };
   }
 

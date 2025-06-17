@@ -5,7 +5,6 @@
 import { FastifyRequest } from 'fastify';
 import {
   ValidationConstraints,
-  ValidationMessages,
   performCustomValidation,
   claudeApiValidationSchema,
   openAIApiValidationSchema,
@@ -14,13 +13,10 @@ import { ValidationError } from '../../src/errors';
 
 describe('Request Validator', () => {
   describe('ValidationConstraints', () => {
-    it('should have reasonable constraint values', () => {
-      expect(ValidationConstraints.MAX_PROMPT_LENGTH).toBe(100000);
-      expect(ValidationConstraints.MAX_SYSTEM_PROMPT_LENGTH).toBe(10000);
-      expect(ValidationConstraints.MAX_SESSION_ID_LENGTH).toBe(128);
-      expect(ValidationConstraints.MAX_WORKSPACE_NAME_LENGTH).toBe(64);
-      expect(ValidationConstraints.MAX_TOOL_NAME_LENGTH).toBe(128);
-      expect(ValidationConstraints.MAX_ARRAY_LENGTH).toBe(100);
+    it('should have valid patterns defined', () => {
+      expect(ValidationConstraints.SESSION_ID_PATTERN).toBeInstanceOf(RegExp);
+      expect(ValidationConstraints.WORKSPACE_NAME_PATTERN).toBeInstanceOf(RegExp);
+      expect(ValidationConstraints.TOOL_NAME_PATTERN).toBeInstanceOf(RegExp);
     });
 
     it('should have valid regex patterns', () => {
@@ -98,7 +94,7 @@ describe('Request Validator', () => {
       }
     });
 
-    it('should validate total message length for OpenAI endpoint', async () => {
+    it('should allow large messages for OpenAI endpoint', async () => {
       mockRequest = {
         ...mockRequest,
         url: '/v1/chat/completions',
@@ -106,23 +102,14 @@ describe('Request Validator', () => {
       mockRequest.body = {
         messages: [
           { role: 'system', content: 'A'.repeat(50000) },
-          { role: 'user', content: 'B'.repeat(60000) }, // Total: 110000 > 100000
+          { role: 'user', content: 'B'.repeat(60000) }, // Large content now allowed
         ],
       };
 
+      // Should not throw with large content (no size limits for personal use)
       await expect(
         performCustomValidation(mockRequest as FastifyRequest)
-      ).rejects.toThrow(ValidationError);
-
-      try {
-        await performCustomValidation(mockRequest as FastifyRequest);
-      } catch (error) {
-        expect(error).toBeInstanceOf(ValidationError);
-        const validationError = error as ValidationError;
-        expect(validationError.validationErrors).toHaveLength(1);
-        expect(validationError.validationErrors[0].field).toBe('messages');
-        expect(validationError.validationErrors[0].code).toBe('messages_too_long');
-      }
+      ).resolves.not.toThrow();
     });
 
     it('should pass validation for valid OpenAI request within limits', async () => {
@@ -173,9 +160,9 @@ describe('Request Validator', () => {
       const body = claudeApiValidationSchema.body as any;
       const props = body.properties;
       expect(props.prompt.minLength).toBe(1);
-      expect(props.prompt.maxLength).toBe(ValidationConstraints.MAX_PROMPT_LENGTH);
+      expect(props.prompt.minLength).toBe(1);
       expect(props['session-id'].pattern).toBe(ValidationConstraints.SESSION_ID_PATTERN.source);
-      expect(props['allowed-tools'].maxItems).toBe(ValidationConstraints.MAX_ARRAY_LENGTH);
+      expect(props['allowed-tools'].type).toBe('array');
     });
 
     it('should have required fields in OpenAI API schema', () => {
@@ -190,7 +177,7 @@ describe('Request Validator', () => {
       const body = openAIApiValidationSchema.body as any;
       const props = body.properties;
       expect(props.messages.minItems).toBe(1);
-      expect(props.messages.maxItems).toBe(ValidationConstraints.MAX_ARRAY_LENGTH);
+      expect(props.messages.type).toBe('array');
       expect(props.messages.items.required).toEqual(['role', 'content']);
       expect(props.messages.items.properties.role.enum).toEqual(['system', 'user', 'assistant']);
       expect(props.temperature?.minimum).toBe(0);
@@ -198,13 +185,11 @@ describe('Request Validator', () => {
     });
   });
 
-  describe('Error Messages', () => {
-    it('should have user-friendly error messages', () => {
-      expect(ValidationMessages.PROMPT_TOO_LONG).toContain('100000 characters or less');
-      expect(ValidationMessages.SESSION_ID_INVALID).toContain('alphanumeric');
-      expect(ValidationMessages.WORKSPACE_NAME_INVALID).toContain('alphanumeric');
-      expect(ValidationMessages.EMPTY_PROMPT).toBe('Prompt cannot be empty');
-      expect(ValidationMessages.INVALID_MESSAGE_ROLE).toContain('system, user, assistant');
+  describe('Validation patterns', () => {
+    it('should have working regex patterns', () => {
+      expect('test-123').toMatch(ValidationConstraints.SESSION_ID_PATTERN);
+      expect('workspace_1').toMatch(ValidationConstraints.WORKSPACE_NAME_PATTERN);
+      expect('mcp:tool').toMatch(ValidationConstraints.TOOL_NAME_PATTERN);
     });
   });
 });

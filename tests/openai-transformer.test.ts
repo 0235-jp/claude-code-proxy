@@ -173,7 +173,7 @@ Processing...
   });
 
   describe('convertRequest', () => {
-    it('should convert complete OpenAI request', () => {
+    it('should convert complete OpenAI request', async () => {
       const request: OpenAIRequest = {
         messages: [
           { role: 'system', content: 'You are a helpful assistant' },
@@ -186,7 +186,7 @@ Processing...
         stream: true,
       };
 
-      const result = OpenAITransformer.convertRequest(request);
+      const result = await OpenAITransformer.convertRequest(request);
 
       expect(result.systemPrompt).toBe('You are a helpful assistant');
       expect(result.prompt).toBe('List files');
@@ -194,23 +194,25 @@ Processing...
         session_id: 'abc-123',
         workspace: 'new-workspace', // Current message overrides previous
       });
+      expect(result.filePaths).toEqual([]);
     });
 
-    it('should handle request without system prompt', () => {
+    it('should handle request without system prompt', async () => {
       const request: OpenAIRequest = {
         messages: [
           { role: 'user', content: 'Hello world' },
         ],
       };
 
-      const result = OpenAITransformer.convertRequest(request);
+      const result = await OpenAITransformer.convertRequest(request);
 
       expect(result.systemPrompt).toBeNull();
       expect(result.prompt).toBe('Hello world');
       expect(result.sessionInfo).toEqual({});
+      expect(result.filePaths).toEqual([]);
     });
 
-    it('should merge previous and current configurations', () => {
+    it('should merge previous and current configurations', async () => {
       const request: OpenAIRequest = {
         messages: [
           { role: 'user', content: 'First message' },
@@ -222,16 +224,17 @@ Processing...
         ],
       };
 
-      const result = OpenAITransformer.convertRequest(request);
+      const result = await OpenAITransformer.convertRequest(request);
 
       expect(result.sessionInfo).toEqual({
         session_id: 'def-456',
         allowedTools: ['Read', 'Task'], // Current overrides previous
         dangerouslySkipPermissions: true, // Preserved from previous
       });
+      expect(result.filePaths).toEqual([]);
     });
 
-    it('should preserve unspecified parameters when updating only one parameter', () => {
+    it('should preserve unspecified parameters when updating only one parameter', async () => {
       const request: OpenAIRequest = {
         messages: [
           { role: 'user', content: 'First message' },
@@ -243,7 +246,7 @@ Processing...
         ],
       };
 
-      const result = OpenAITransformer.convertRequest(request);
+      const result = await OpenAITransformer.convertRequest(request);
 
       expect(result.sessionInfo).toEqual({
         session_id: '79c3a212-7fc2-47ea-9066-c5e5371950b9',
@@ -251,11 +254,12 @@ Processing...
         disallowedTools: ['Task'], // Should be updated from current message
         mcpAllowedTools: ['mcp__deepwiki__read_wiki_structure', 'mcp__deepwiki__read_wiki_content', 'mcp_deepwiki__ask_question'], // Should be preserved from previous
       });
+      expect(result.filePaths).toEqual([]);
     });
 
     // TODO: Fix multiline extraction issue for empty array inheritance
     // This test passes for the main bug fix but has issues with multiline extraction
-    it.skip('should handle empty arrays in parameter inheritance', () => {
+    it.skip('should handle empty arrays in parameter inheritance', async () => {
       const request: OpenAIRequest = {
         messages: [
           { role: 'user', content: 'First message' },
@@ -267,7 +271,7 @@ Processing...
         ],
       };
 
-      const result = OpenAITransformer.convertRequest(request);
+      const result = await OpenAITransformer.convertRequest(request);
 
       expect(result.sessionInfo).toEqual({
         session_id: 'test-123',
@@ -275,6 +279,7 @@ Processing...
         disallowedTools: [], // Should be updated to empty array
       });
       expect(result.prompt).toBe('Clear all restrictions');
+      expect(result.filePaths).toEqual([]);
     });
   });
 
