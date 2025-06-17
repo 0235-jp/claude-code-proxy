@@ -18,10 +18,12 @@ export class StreamProcessor {
   private readonly messageId: string;
   private readonly chunkSize: number;
   private originalWrite: Function | null = null;
+  private showThinking = true;
 
-  constructor(chunkSize = 100) {
+  constructor(chunkSize = 100, showThinking = false) {
     this.messageId = `chatcmpl-${Date.now()}`;
     this.chunkSize = chunkSize;
+    this.showThinking = showThinking;
   }
 
   /**
@@ -112,7 +114,9 @@ export class StreamProcessor {
       if (item.type === 'text') {
         // Close thinking when text content arrives
         if (this.inThinking) {
-          this.sendChunk(reply, '\n</thinking>\n');
+          if (this.showThinking) {
+            this.sendChunk(reply, '\n</thinking>\n');
+          }
           this.inThinking = false;
         }
 
@@ -127,30 +131,42 @@ export class StreamProcessor {
           );
         }
       } else if (item.type === 'thinking') {
-        // Reopen thinking if it was closed by text
-        if (!this.inThinking) {
-          this.sendChunk(reply, '\n<thinking>\n');
-          this.inThinking = true;
+        // Always process thinking content
+        const thinkingContent = item.thinking || '';
+
+        if (this.showThinking) {
+          // Show thinking tags when enabled
+          if (!this.inThinking) {
+            this.sendChunk(reply, '\n<thinking>\n');
+            this.inThinking = true;
+          }
         }
 
-        // Thinking content stays within thinking tags
-        const thinkingContent = item.thinking || '';
-        const fullText = `\n🤖< ${thinkingContent}`;
+        // Always show thinking content
+        const fullText = this.showThinking
+          ? `\n💭 ${thinkingContent}\n\n`
+          : `\n\`\`\`💭 Thinking\n${thinkingContent}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
         }
       } else if (item.type === 'tool_use') {
-        // Reopen thinking if it was closed by text
-        if (!this.inThinking) {
-          this.sendChunk(reply, '\n<thinking>\n');
-          this.inThinking = true;
-        }
-
-        // Tool use stays within thinking tags
+        // Always process tool use content
         const toolName = item.name || 'Unknown';
         const toolInput = JSON.stringify(item.input || {});
-        const fullText = `\n🔧 Using ${toolName}: ${toolInput}\n`;
+
+        if (this.showThinking) {
+          // Show thinking tags when enabled
+          if (!this.inThinking) {
+            this.sendChunk(reply, '\n<thinking>\n');
+            this.inThinking = true;
+          }
+        }
+
+        // Always show tool use content
+        const fullText = this.showThinking
+          ? `\n🔧 Using ${toolName}: ${toolInput}\n\n`
+          : `\n\`\`\`🔧 Tool use\nUsing ${toolName}: ${toolInput}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -162,7 +178,9 @@ export class StreamProcessor {
     if (isFinalResponse && content.every(item => item.type !== 'text')) {
       // Close thinking if still open at end of final response
       if (this.inThinking) {
-        this.sendChunk(reply, '\n</thinking>\n');
+        if (this.showThinking) {
+          this.sendChunk(reply, '\n</thinking>\n');
+        }
         this.inThinking = false;
       }
 
@@ -179,17 +197,27 @@ export class StreamProcessor {
 
     for (const item of content) {
       if (item.type === 'tool_result') {
-        // Reopen thinking if it was closed by text
-        if (!this.inThinking) {
-          this.sendChunk(reply, '\n<thinking>\n');
-          this.inThinking = true;
-        }
-
+        // Always process tool result content
         const toolContent = item.content || '';
         const isError = item.is_error || false;
-
         const prefix = isError ? '\n❌ Tool Error: ' : '\n✅ Tool Result: ';
-        const fullText = prefix + toolContent + '\n';
+
+        if (this.showThinking) {
+          // Show thinking tags when enabled
+          if (!this.inThinking) {
+            this.sendChunk(reply, '\n<thinking>\n');
+            this.inThinking = true;
+          }
+        }
+
+        // Always show tool result content
+        const displayContent = toolContent;
+        // No truncation for tool results when using code blocks
+        const resultIcon = isError ? '❌' : '✅';
+        const resultType = isError ? 'Tool Error' : 'Tool Result';
+        const fullText = this.showThinking
+          ? prefix + displayContent + '\n\n'
+          : `\n\`\`\`${resultIcon} ${resultType}\n${displayContent}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -204,7 +232,9 @@ export class StreamProcessor {
   private processSuccessResult(reply: FastifyReply): void {
     // Close thinking block if still open
     if (this.inThinking) {
-      this.sendChunk(reply, '\n</thinking>\n');
+      if (this.showThinking) {
+        this.sendChunk(reply, '\n</thinking>\n');
+      }
       this.inThinking = false;
     }
 
@@ -221,7 +251,9 @@ export class StreamProcessor {
    */
   private processError(jsonData: StreamJsonData, reply: FastifyReply): void {
     if (this.inThinking) {
-      this.sendChunk(reply, '\n</thinking>\n');
+      if (this.showThinking) {
+        this.sendChunk(reply, '\n</thinking>\n');
+      }
       this.inThinking = false;
     }
 
@@ -230,7 +262,9 @@ export class StreamProcessor {
         ? jsonData.error
         : jsonData.error?.message || JSON.stringify(jsonData.error) || 'Unknown error';
 
-    const fullText = `⚠️ ${errorMessage}\n`;
+    const fullText = this.showThinking
+      ? `⚠️ ${errorMessage}\n\n`
+      : `\n\`\`\`⚠️ Error\n${errorMessage}\n\`\`\`\n\n`;
     const chunks = this.splitIntoChunks(fullText);
     for (let i = 0; i < chunks.length; i++) {
       this.sendChunk(reply, chunks[i], i === chunks.length - 1 ? 'stop' : null);
@@ -250,13 +284,21 @@ export class StreamProcessor {
       `Received unknown JSON data type: ${jsonData.type}`
     );
 
-    // Show unknown data in thinking block for debugging
-    if (!this.inThinking) {
-      this.sendChunk(reply, '\n<thinking>\n');
-      this.inThinking = true;
+    // Always process unknown data for debugging
+    const unknownContent = `Unknown data type '${jsonData.type}': ${JSON.stringify(jsonData, null, 2)}`;
+    const unknownText = this.showThinking
+      ? `\n🔍 ${unknownContent}\n\n`
+      : `\n\`\`\`🔍 Debug\n${unknownContent}\n\`\`\`\n\n`;
+
+    if (this.showThinking) {
+      // Show thinking tags when enabled
+      if (!this.inThinking) {
+        this.sendChunk(reply, '\n<thinking>\n');
+        this.inThinking = true;
+      }
     }
 
-    const unknownText = `\n🔍 Unknown data type '${jsonData.type}': ${JSON.stringify(jsonData, null, 2)}\n`;
+    // Always show unknown data
     const chunks = this.splitIntoChunks(unknownText);
     for (const chunk of chunks) {
       this.sendChunk(reply, chunk);
@@ -331,7 +373,9 @@ export class StreamProcessor {
    */
   cleanup(reply: FastifyReply): void {
     if (this.inThinking) {
-      this.sendChunk(reply, '\n</thinking>\n');
+      if (this.showThinking) {
+        this.sendChunk(reply, '\n</thinking>\n');
+      }
       this.inThinking = false;
     }
   }

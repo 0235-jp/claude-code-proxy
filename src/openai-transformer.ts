@@ -151,6 +151,11 @@ export class OpenAITransformer {
       }
     }
 
+    const thinkingMatch = userMessage.match(/(?:^|\s)thinking=(\w+)/m);
+    if (thinkingMatch) {
+      config.showThinking = thinkingMatch[1].toLowerCase() === 'true';
+    }
+
     // Extract prompt
     const promptMatch = userMessage.match(/(?:^|\s)prompt="([^"]+)"/m);
     let cleanedPrompt: string;
@@ -164,6 +169,7 @@ export class OpenAITransformer {
         .replace(/(?:^|\s)allowed-tools=\[[^\]]*\]/gm, '')
         .replace(/(?:^|\s)disallowed-tools=\[[^\]]*\]/gm, '')
         .replace(/(?:^|\s)mcp-allowed-tools=\[[^\]]*\]/gm, '')
+        .replace(/(?:^|\s)thinking=\w+/gm, '')
         .replace(/(?:^|\s)prompt="[^"]+"/gm, '')
         .replace(/(?:^|\s)prompt=/gm, '')
         .replace(/\s+/g, ' ')
@@ -370,6 +376,9 @@ export class OpenAITransformer {
     if (sessionInfo.mcpAllowedTools) {
       const toolsStr = sessionInfo.mcpAllowedTools.map(tool => `"${tool}"`).join(',');
       info += `mcp-allowed-tools=[${toolsStr}]\n`;
+    }
+    if (sessionInfo.showThinking !== null && sessionInfo.showThinking !== undefined) {
+      info += `thinking=${sessionInfo.showThinking}\n`;
     }
 
     return info;

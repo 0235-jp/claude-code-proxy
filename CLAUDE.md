@@ -38,6 +38,11 @@ curl -X POST http://localhost:3000/api/claude \
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+
+# OpenAI endpoint with thinking tags enabled
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "thinking=true Hello"}], "stream": true}'
 ```
 
 #### With Authentication (Production)
@@ -56,6 +61,17 @@ curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $API_KEY" \
   -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+
+# OpenAI endpoint with thinking visualization modes
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "thinking=true List files"}], "stream": true}'
+
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "thinking=false List files"}], "stream": true}'
 
 # Test with custom port
 curl -X POST http://localhost:8080/api/claude \

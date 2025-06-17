@@ -22,6 +22,7 @@ Claude Code Proxy is a Fastify-based HTTP proxy server that wraps the Claude Cod
 - **Session Management**: Resume conversations with Claude Code sessions
 - **OpenAI API Compatible**: Drop-in replacement for OpenAI chat completions
 - **Permission Control**: Fine-grained tool permission management
+- **Thinking Visualization**: Toggle between code block format and thinking tags for Claude's internal process
 - **Structured Logging**: Comprehensive logging with security and performance monitoring
 
 ## Tech Stack
@@ -85,6 +86,7 @@ claude-code-proxy/
 | `allowed-tools` | string[] | Allowed Claude tools | `["Bash", "Edit", "Write"]` |
 | `disallowed-tools` | string[] | Disallowed Claude tools | `["WebFetch", "WebSearch"]` |
 | `mcp-allowed-tools` | string[] | Allowed MCP tools | `["mcp__github__get_repo"]` |
+| `thinking` | boolean | Show thinking process in code blocks (default: false) | `true` |
 
 ## API Endpoints
 
@@ -193,6 +195,7 @@ workspace=project-name
 allowed-tools=["Bash","Edit","Write"]
 mcp-allowed-tools=["mcp__github__get_repo"]
 dangerously-skip-permissions=true
+thinking=true
 
 Your actual prompt here
 ```
@@ -253,6 +256,62 @@ curl -X PUT http://localhost:3000/process \
   -H "Content-Type: application/pdf" \
   -H "Authorization: Bearer sk-your-api-key-here" \
   --data-binary @document.pdf
+```
+
+## Thinking Visualization Modes
+
+Claude Code Proxy supports two visualization modes for Claude's internal thinking process:
+
+### Code Block Format (Default - `thinking=false`)
+
+When `thinking=false` (default), Claude's internal operations are displayed in clean markdown code blocks:
+
+```💭 Thinking
+I need to analyze this request and create a Python script.
+Let me break this down into steps:
+1. Create the file structure
+2. Write the main logic
+3. Add error handling
+```
+
+```🔧 Tool use
+Using Write: {"file_path": "/path/to/script.py", "content": "#!/usr/bin/env python3..."}
+```
+
+```✅ Tool Result
+File created successfully at /path/to/script.py
+```
+
+### Thinking Tags Format (`thinking=true`)
+
+When `thinking=true`, Claude's internal operations are wrapped in `<thinking>` tags:
+
+```
+<thinking>
+💭 I need to analyze this request and create a Python script.
+
+🔧 Using Write: {"file_path": "/path/to/script.py", "content": "#!/usr/bin/env python3..."}
+
+✅ Tool Result: File created successfully at /path/to/script.py
+</thinking>
+
+Here's the Python script I created for you...
+```
+
+### Usage Examples
+
+**Code block format (default):**
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Create a Python script"}], "stream": true}'
+```
+
+**Thinking tags format:**
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-code", "messages": [{"role": "user", "content": "thinking=true Create a Python script"}], "stream": true}'
 ```
 
 ## MCP (Model Context Protocol) Support
@@ -373,6 +432,27 @@ curl -X POST http://localhost:3000/api/claude \
   -d '{
     "prompt": "Create a web application",
     "system-prompt": "You are a senior software engineer who specializes in modern web development with TypeScript and React."
+  }'
+```
+
+**With Thinking Visualization:**
+```bash
+# Using thinking tags format
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-code",
+    "messages": [{"role": "user", "content": "thinking=true Create a Python web scraper"}],
+    "stream": true
+  }'
+
+# Using code block format (default)
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-code", 
+    "messages": [{"role": "user", "content": "thinking=false Create a Python web scraper"}],
+    "stream": true
   }'
 ```
 

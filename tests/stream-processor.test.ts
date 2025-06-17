@@ -26,7 +26,7 @@ describe('StreamProcessor', () => {
   let mockWrite: jest.Mock;
 
   beforeEach(() => {
-    streamProcessor = new StreamProcessor();
+    streamProcessor = new StreamProcessor(100, true); // Enable thinking tags for tests
     mockWrite = jest.fn();
     mockReply = {
       raw: {
@@ -138,7 +138,27 @@ describe('StreamProcessor', () => {
           expect.stringContaining('<thinking>')
         );
         expect(mockWrite).toHaveBeenCalledWith(
-          expect.stringContaining('🤖< Processing request...')
+          expect.stringContaining('💭 Processing request...')
+        );
+      });
+
+      it('should process thinking content without tags when showThinking is false', () => {
+        const streamProcessorNoThinking = new StreamProcessor(100, false);
+        streamProcessorNoThinking.setOriginalWrite(mockWrite);
+        const chunk = Buffer.from('data: {"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Processing request..."}]}}');
+        
+        streamProcessorNoThinking.processChunk(chunk, mockReply as FastifyReply, {});
+
+        // Should not open thinking block
+        expect(mockWrite).not.toHaveBeenCalledWith(
+          expect.stringContaining('<thinking>')
+        );
+        // Should show thinking content as code block
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('```💭 Thinking')
+        );
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('Processing request...')
         );
       });
 
@@ -159,6 +179,26 @@ describe('StreamProcessor', () => {
           call[0].includes('test.txt')
         );
         expect(callsWithToolInput.length).toBeGreaterThan(0);
+      });
+
+      it('should process tool use without tags when showThinking is false', () => {
+        const streamProcessorNoThinking = new StreamProcessor(100, false);
+        streamProcessorNoThinking.setOriginalWrite(mockWrite);
+        const chunk = Buffer.from('data: {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file":"test.txt"}}]}}');
+        
+        streamProcessorNoThinking.processChunk(chunk, mockReply as FastifyReply, {});
+
+        // Should not open thinking block
+        expect(mockWrite).not.toHaveBeenCalledWith(
+          expect.stringContaining('<thinking>')
+        );
+        // Should show tool use content as code block
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('```🔧 Tool use')
+        );
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('Using Read:')
+        );
       });
 
       it('should handle final response with stop reason', () => {
@@ -198,6 +238,35 @@ describe('StreamProcessor', () => {
         expect(mockWrite).toHaveBeenCalledWith(
           expect.stringContaining('Error occurred')
         );
+      });
+
+      it('should show tool result content in code blocks without truncation', () => {
+        const streamProcessorNoThinking = new StreamProcessor(1000, false); // Large chunk size
+        streamProcessorNoThinking.setOriginalWrite(mockWrite);
+        const longContent = 'A'.repeat(150); // 150 characters
+        const chunk = Buffer.from(`data: {"type":"user","message":{"content":[{"type":"tool_result","content":"${longContent}","is_error":false}]}}`);
+        
+        streamProcessorNoThinking.processChunk(chunk, mockReply as FastifyReply, {});
+
+        // Check if tool result is shown as code block without truncation
+        const calls = mockWrite.mock.calls.map(call => call[0]).join('');
+        expect(calls).toContain('```✅ Tool Result');
+        expect(calls).toContain('A'.repeat(150)); // Should contain full content (no truncation for code blocks)
+      });
+
+      it('should not truncate tool result errors even when showThinking is false', () => {
+        const streamProcessorNoThinking = new StreamProcessor(1000, false); // Large chunk size to avoid splitting
+        streamProcessorNoThinking.setOriginalWrite(mockWrite);
+        const longError = 'Error: ' + 'E'.repeat(150); // 157 characters
+        const chunk = Buffer.from(`data: {"type":"user","message":{"content":[{"type":"tool_result","content":"${longError}","is_error":true}]}}`);
+        
+        streamProcessorNoThinking.processChunk(chunk, mockReply as FastifyReply, {});
+
+        // Check if error is shown as code block
+        const calls = mockWrite.mock.calls.map(call => call[0]).join('');
+        expect(calls).toContain('```❌ Tool Error');
+        expect(calls).toContain('E'.repeat(150)); // Should contain the repeated E's
+        expect(calls).not.toContain('...'); // Should not be truncated
       });
     });
 
@@ -288,6 +357,25 @@ describe('StreamProcessor', () => {
       streamProcessor.cleanup(mockReply as FastifyReply);
 
       expect(mockWrite).not.toHaveBeenCalled();
+    });
+
+    it('should not send closing tag when showThinking is false', () => {
+      const streamProcessorNoThinking = new StreamProcessor(100, false);
+      streamProcessorNoThinking.setOriginalWrite(mockWrite);
+      
+      // Process thinking content to open thinking block (but no tags will be shown)
+      const thinkingChunk = Buffer.from('data: {"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Test thinking"}]}}');
+      streamProcessorNoThinking.processChunk(thinkingChunk, mockReply as FastifyReply, {});
+
+      // Clear previous calls
+      mockWrite.mockClear();
+
+      streamProcessorNoThinking.cleanup(mockReply as FastifyReply);
+
+      // Should not send closing thinking tag
+      expect(mockWrite).not.toHaveBeenCalledWith(
+        expect.stringContaining('</thinking>')
+      );
     });
   });
 
