@@ -6,6 +6,9 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import * as path from 'path';
+import * as fs from 'fs/promises';
+import { v4 as uuidv4 } from 'uuid';
+import { fileTypeFromBuffer } from 'file-type';
 import { executeClaudeAndStream } from './claude-executor';
 import { loadMcpConfig } from './mcp-manager';
 import { performHealthCheck } from './health-checker';
@@ -22,6 +25,25 @@ import {
   openAIApiValidationSchema,
   createValidationPreHandler,
 } from './middleware/request-validator';
+
+/**
+ * Detect file extension using file-type library
+ */
+async function detectFileExtension(fileData: Buffer): Promise<string> {
+  try {
+    // Use file-type library to detect file type from magic numbers
+    const detectedType = await fileTypeFromBuffer(fileData);
+    if (detectedType) {
+      return `.${detectedType.ext}`;
+    }
+  } catch (error) {
+    // If file-type fails, continue with fallback
+  }
+
+  // If file-type can't detect it, assume it's a text file and use .txt
+  // This is safer than .unknown and Claude can still read it
+  return '.txt';
+}
 
 // Configure Fastify with custom logger and validation
 const server = fastify({
@@ -428,6 +450,122 @@ async function startServer(): Promise<void> {
             'Failed to write error response'
           );
           reply.raw.destroy();
+        }
+      }
+    }
+  );
+
+  // External Document Loader endpoint for OpenWebUI integration
+  server.put(
+    '/process',
+    {
+      preHandler: [authenticateRequest],
+    },
+    async (request, reply) => {
+      const requestLogger = createRequestLogger('external-doc-loader', request.id);
+      const perfLogger = new PerformanceLogger(requestLogger, 'external-doc-loader-request');
+
+      try {
+        // Get the raw body as Buffer
+        const fileData = request.body as Buffer;
+
+        if (!fileData || fileData.length === 0) {
+          throw new InvalidRequestError(
+            'No file data provided',
+            { requestId: request.id, endpoint: '/process' },
+            ErrorCode.INVALID_REQUEST
+          );
+        }
+
+        // Determine file extension from magic numbers (file signature)
+        const fileExtension = await detectFileExtension(fileData);
+
+        // Create files directory in workspace base
+        const workspaceBasePath = process.env.WORKSPACE_BASE_PATH || process.cwd();
+        const filesDirectory = path.join(workspaceBasePath, 'files');
+
+        try {
+          await fs.mkdir(filesDirectory, { recursive: true });
+        } catch (mkdirError) {
+          requestLogger.error(
+            {
+              error: mkdirError instanceof Error ? mkdirError.message : 'Unknown error',
+              filesDirectory,
+              type: 'directory_creation_error',
+            },
+            'Failed to create files directory'
+          );
+          throw new Error('Failed to create files directory');
+        }
+
+        // Generate unique filename with UUID
+        const fileId = uuidv4();
+        const fileName = `${fileId}${fileExtension}`;
+        const filePath = path.join(filesDirectory, fileName);
+
+        // Save file to disk
+        try {
+          await fs.writeFile(filePath, fileData);
+        } catch (writeError) {
+          requestLogger.error(
+            {
+              error: writeError instanceof Error ? writeError.message : 'Unknown error',
+              filePath,
+              fileSize: fileData.length,
+              type: 'file_write_error',
+            },
+            'Failed to write file to disk'
+          );
+          throw new Error('Failed to save file');
+        }
+
+        // Create filename for source display (without UUID for cleaner display)
+        const displayFileName = `document${fileExtension}`;
+
+        requestLogger.info(
+          {
+            type: 'file_saved',
+            filePath,
+            fileSize: fileData.length,
+            contentType: request.headers['content-type'] || 'application/octet-stream',
+            fileId,
+            displayFileName,
+          },
+          `External document saved: ${fileName}`
+        );
+
+        // Return response in OpenWebUI External Document Loader format
+        const response = {
+          page_content: filePath,
+          metadata: {
+            source: displayFileName,
+          },
+        };
+
+        perfLogger.finish('success');
+        reply.send(response);
+      } catch (error) {
+        requestLogger.error(
+          {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            type: 'external_doc_loader_error',
+          },
+          'External Document Loader request failed'
+        );
+        perfLogger.finish('error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        if (error instanceof InvalidRequestError) {
+          reply.code(400).send({
+            error: 'Bad Request',
+            message: error.message,
+          });
+        } else {
+          reply.code(500).send({
+            error: 'Internal Server Error',
+            message: 'Failed to process document',
+          });
         }
       }
     }

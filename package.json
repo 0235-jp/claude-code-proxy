@@ -7,10 +7,12 @@
     "@fastify/multipart": "^8.x",
     "dotenv": "^16.x",
     "fastify": "^4.x",
+    "file-type": "^21.0.0",
     "pino": "^8.x",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@types/file-type": "^10.6.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^20.x",
     "@types/supertest": "^6.0.3",
