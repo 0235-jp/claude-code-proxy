@@ -26,16 +26,48 @@ import {
   createValidationPreHandler,
 } from './middleware/request-validator';
 
+// Cache for file-type module to avoid repeated dynamic imports
+let fileTypeFromBuffer: ((buffer: Buffer) => Promise<any>) | null = null;
+
+/**
+ * Initialize file-type module once during server startup
+ */
+async function initializeFileType(): Promise<void> {
+  try {
+    const { fileTypeFromBuffer: ftfb } = await loadEsm<typeof import('file-type')>('file-type');
+    fileTypeFromBuffer = ftfb;
+    serverLogger.info(
+      {
+        type: 'file_type_initialized',
+      },
+      'file-type module initialized successfully'
+    );
+  } catch (error) {
+    serverLogger.error(
+      {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        type: 'file_type_init_error',
+      },
+      'Failed to initialize file-type module'
+    );
+  }
+}
+
 /**
  * Detect file extension using file-type library
  */
 async function detectFileExtension(fileData: Buffer): Promise<string> {
   try {
-    // Use load-esm to import ESM-only file-type library
-    const { fileTypeFromBuffer } = await loadEsm<typeof import('file-type')>('file-type');
-    const detectedType = await fileTypeFromBuffer(fileData);
-    if (detectedType) {
-      return `.${detectedType.ext}`;
+    // Use cached file-type module, initialize if not available
+    if (!fileTypeFromBuffer) {
+      await initializeFileType();
+    }
+
+    if (fileTypeFromBuffer) {
+      const detectedType = await fileTypeFromBuffer(fileData);
+      if (detectedType) {
+        return `.${detectedType.ext}`;
+      }
     }
   } catch (error) {
     // If file-type fails, continue with fallback
@@ -126,6 +158,9 @@ async function startServer(): Promise<void> {
 
   // Load MCP configuration on startup
   await loadMcpConfig();
+
+  // Initialize file-type module for optimal performance
+  await initializeFileType();
 
   // Health check endpoint
   server.get('/health', async (_request, reply) => {
@@ -469,7 +504,7 @@ async function startServer(): Promise<void> {
   server.put(
     '/process',
     {
-      preHandler: [authenticateRequest],
+      preHandler: [authenticateRequest, createValidationPreHandler()],
     },
     async (request, reply) => {
       const requestLogger = createRequestLogger('external-doc-loader', request.id);
