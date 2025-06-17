@@ -143,7 +143,9 @@ export class StreamProcessor {
         }
 
         // Always show thinking content
-        const fullText = `\n💭 ${thinkingContent}\n\n`;
+        const fullText = this.showThinking
+          ? `\n💭 ${thinkingContent}\n\n`
+          : `\n\`\`\`💭 Thinking\n${thinkingContent}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -162,7 +164,9 @@ export class StreamProcessor {
         }
 
         // Always show tool use content
-        const fullText = `\n🔧 Using ${toolName}: ${toolInput}\n\n`;
+        const fullText = this.showThinking
+          ? `\n🔧 Using ${toolName}: ${toolInput}\n\n`
+          : `\n\`\`\`🔧 Tool use\nUsing ${toolName}: ${toolInput}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -207,11 +211,13 @@ export class StreamProcessor {
         }
 
         // Always show tool result content
-        let displayContent = toolContent;
-        if (!this.showThinking && !isError && toolContent.length > 100) {
-          displayContent = toolContent.substring(0, 100) + '...[truncated]';
-        }
-        const fullText = prefix + displayContent + '\n\n';
+        const displayContent = toolContent;
+        // No truncation for tool results when using code blocks
+        const resultIcon = isError ? '❌' : '✅';
+        const resultType = isError ? 'Tool Error' : 'Tool Result';
+        const fullText = this.showThinking
+          ? prefix + displayContent + '\n\n'
+          : `\n\`\`\`${resultIcon} ${resultType}\n${displayContent}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -256,7 +262,9 @@ export class StreamProcessor {
         ? jsonData.error
         : jsonData.error?.message || JSON.stringify(jsonData.error) || 'Unknown error';
 
-    const fullText = `⚠️ ${errorMessage}\n\n`;
+    const fullText = this.showThinking
+      ? `⚠️ ${errorMessage}\n\n`
+      : `\n\`\`\`⚠️ Error\n${errorMessage}\n\`\`\`\n\n`;
     const chunks = this.splitIntoChunks(fullText);
     for (let i = 0; i < chunks.length; i++) {
       this.sendChunk(reply, chunks[i], i === chunks.length - 1 ? 'stop' : null);
@@ -277,7 +285,10 @@ export class StreamProcessor {
     );
 
     // Always process unknown data for debugging
-    const unknownText = `\n🔍 Unknown data type '${jsonData.type}': ${JSON.stringify(jsonData, null, 2)}\n\n`;
+    const unknownContent = `Unknown data type '${jsonData.type}': ${JSON.stringify(jsonData, null, 2)}`;
+    const unknownText = this.showThinking
+      ? `\n🔍 ${unknownContent}\n\n`
+      : `\n\`\`\`🔍 Debug\n${unknownContent}\n\`\`\`\n\n`;
 
     if (this.showThinking) {
       // Show thinking tags when enabled

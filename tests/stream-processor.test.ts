@@ -153,9 +153,12 @@ describe('StreamProcessor', () => {
         expect(mockWrite).not.toHaveBeenCalledWith(
           expect.stringContaining('<thinking>')
         );
-        // Should still show thinking content with emoji
+        // Should show thinking content as code block
         expect(mockWrite).toHaveBeenCalledWith(
-          expect.stringContaining('💭 Processing request...')
+          expect.stringContaining('```💭 Thinking')
+        );
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('Processing request...')
         );
       });
 
@@ -189,9 +192,12 @@ describe('StreamProcessor', () => {
         expect(mockWrite).not.toHaveBeenCalledWith(
           expect.stringContaining('<thinking>')
         );
-        // Should still show tool use content with emoji
+        // Should show tool use content as code block
         expect(mockWrite).toHaveBeenCalledWith(
-          expect.stringContaining('🔧 Using Read:')
+          expect.stringContaining('```🔧 Tool use')
+        );
+        expect(mockWrite).toHaveBeenCalledWith(
+          expect.stringContaining('Using Read:')
         );
       });
 
@@ -234,19 +240,18 @@ describe('StreamProcessor', () => {
         );
       });
 
-      it('should truncate tool result content when showThinking is false and content is long', () => {
-        const streamProcessorNoThinking = new StreamProcessor(100, false);
+      it('should show tool result content in code blocks without truncation', () => {
+        const streamProcessorNoThinking = new StreamProcessor(1000, false); // Large chunk size
         streamProcessorNoThinking.setOriginalWrite(mockWrite);
         const longContent = 'A'.repeat(150); // 150 characters
         const chunk = Buffer.from(`data: {"type":"user","message":{"content":[{"type":"tool_result","content":"${longContent}","is_error":false}]}}`);
         
         streamProcessorNoThinking.processChunk(chunk, mockReply as FastifyReply, {});
 
-        // Check if any call contains the truncated content
+        // Check if tool result is shown as code block without truncation
         const calls = mockWrite.mock.calls.map(call => call[0]).join('');
-        expect(calls).toContain('✅ Tool Result:');
-        expect(calls).toContain('...');
-        expect(calls).not.toContain('A'.repeat(150)); // Should not contain full content
+        expect(calls).toContain('```✅ Tool Result');
+        expect(calls).toContain('A'.repeat(150)); // Should contain full content (no truncation for code blocks)
       });
 
       it('should not truncate tool result errors even when showThinking is false', () => {
@@ -257,9 +262,9 @@ describe('StreamProcessor', () => {
         
         streamProcessorNoThinking.processChunk(chunk, mockReply as FastifyReply, {});
 
-        // Check if any call contains the full error content
+        // Check if error is shown as code block
         const calls = mockWrite.mock.calls.map(call => call[0]).join('');
-        expect(calls).toContain('❌ Tool Error:');
+        expect(calls).toContain('```❌ Tool Error');
         expect(calls).toContain('E'.repeat(150)); // Should contain the repeated E's
         expect(calls).not.toContain('...'); // Should not be truncated
       });
