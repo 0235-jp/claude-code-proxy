@@ -2,7 +2,7 @@
  * Main Fastify server with dual API endpoints for Claude Code
  */
 
-import fastify from 'fastify';
+import fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import * as path from 'path';
@@ -111,6 +111,15 @@ async function startServer(): Promise<void> {
       headerPairs: 1000000, // 1M header pairs
     },
   });
+
+  // Add content type parser for binary files (External Document Loader)
+  server.addContentTypeParser(
+    '*',
+    { parseAs: 'buffer' },
+    async (_req: FastifyRequest, body: Buffer) => {
+      return body;
+    }
+  );
 
   // Use centralized error handler
   server.setErrorHandler(errorHandler.handleError);
