@@ -51,7 +51,7 @@ describe('OpenAI Files API E2E Tests', () => {
 
       expect(response.status).toBe(200);
       
-      const result = await response.json();
+      const result = await response.json() as any;
       uploadedFileId = result.id;
 
       expect(result).toEqual({
@@ -258,9 +258,9 @@ describe('OpenAI Files API E2E Tests', () => {
       });
 
       expect(uploadResponse.status).toBe(200);
-      const uploadResult = await uploadResponse.json();
+      const uploadResult = await uploadResponse.json() as any;
 
-      // Use the file in chat completions
+      // Use the file in chat completions with file_id in content
       const chatResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -270,10 +270,13 @@ describe('OpenAI Files API E2E Tests', () => {
         body: JSON.stringify({
           model: 'claude-code',
           messages: [
-            { role: 'user', content: 'What is the content of this file?' }
-          ],
-          files: [
-            { id: uploadResult.id, name: 'analysis.txt' }
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: 'What is the content of this file?' },
+                { type: 'file', file: { file_id: uploadResult.id } }
+              ]
+            }
           ],
           stream: true,
         }),
@@ -283,7 +286,7 @@ describe('OpenAI Files API E2E Tests', () => {
       expect(chatResponse.headers.get('content-type')).toContain('text/event-stream');
 
       // Read the streaming response
-      const reader = chatResponse.body?.getReader();
+      const reader = (chatResponse.body as any)?.getReader();
       if (!reader) {
         throw new Error('No response body reader');
       }
@@ -341,7 +344,7 @@ describe('OpenAI Files API E2E Tests', () => {
       expect(chatResponse.headers.get('content-type')).toContain('text/event-stream');
 
       // Read some of the streaming response
-      const reader = chatResponse.body?.getReader();
+      const reader = (chatResponse.body as any)?.getReader();
       if (!reader) {
         throw new Error('No response body reader');
       }

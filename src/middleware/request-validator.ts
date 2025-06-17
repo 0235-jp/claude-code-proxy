@@ -105,7 +105,7 @@ export const openAIApiValidationSchema: FastifySchema = {
                     properties: {
                       type: {
                         type: 'string',
-                        enum: ['text', 'image_url'],
+                        enum: ['text', 'image_url', 'file'],
                       },
                       text: {
                         type: 'string',
@@ -120,6 +120,20 @@ export const openAIApiValidationSchema: FastifySchema = {
                           detail: {
                             type: 'string',
                             enum: ['low', 'high', 'auto'],
+                          },
+                        },
+                      },
+                      file: {
+                        type: 'object',
+                        properties: {
+                          file_id: {
+                            type: 'string',
+                          },
+                          file_data: {
+                            type: 'string',
+                          },
+                          filename: {
+                            type: 'string',
                           },
                         },
                       },
@@ -169,10 +183,10 @@ export async function performCustomValidation(request: FastifyRequest): Promise<
   const validationErrors: ValidationErrorDetail[] = [];
 
   // Check for specific business logic validations
-  const body = request.body as Record<string, unknown>;
+  const body = request.body as Record<string, unknown> | undefined;
 
   // Example: Check for conflicting tool permissions
-  if (body['allowed-tools'] && body['disallowed-tools']) {
+  if (body && body['allowed-tools'] && body['disallowed-tools']) {
     const allowedSet = new Set(body['allowed-tools'] as string[]);
     const conflicts = (body['disallowed-tools'] as string[]).filter((tool: string) =>
       allowedSet.has(tool)
@@ -204,6 +218,30 @@ export async function performCustomValidation(request: FastifyRequest): Promise<
     );
   }
 }
+
+/**
+ * Validation schema for file upload endpoint
+ */
+export const fileUploadValidationSchema: FastifySchema = {
+  // Multipart form data validation is handled by Fastify multipart plugin
+  // No additional schema needed here
+};
+
+/**
+ * Validation schema for file metadata endpoint
+ */
+export const fileMetadataValidationSchema: FastifySchema = {
+  params: {
+    type: 'object',
+    required: ['fileId'],
+    properties: {
+      fileId: {
+        type: 'string',
+        pattern: '^file-[a-f0-9]+$',
+      },
+    },
+  },
+};
 
 /**
  * Create a validation preHandler that combines JSON schema and custom validation

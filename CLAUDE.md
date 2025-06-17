@@ -68,6 +68,43 @@ curl -X PUT http://localhost:3000/process \
   -H "Content-Type: application/pdf" \
   -H "Authorization: Bearer $API_KEY" \
   --data-binary @document.pdf
+
+# File API endpoints (OpenAI compatible)
+# Upload file
+curl -X POST http://localhost:3000/v1/files \
+  -H "Authorization: Bearer $API_KEY" \
+  -F "file=@package.json;filename=test.json" \
+  -F "purpose=assistants"
+
+# Get file metadata  
+curl http://localhost:3000/v1/files/file-{file_id} \
+  -H "Authorization: Bearer $API_KEY"
+
+# Use file in chat completions with file_id
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{
+    "model": "claude-code",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "allowed-tools=[\"Read\"] What is in this file?"
+          },
+          {
+            "type": "file",
+            "file": {
+              "file_id": "file-{file_id}"
+            }
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }'
 ```
 
 ## Testing Requirements
@@ -92,17 +129,22 @@ npm run test:e2e:nodejs
 # 4. Run all E2E tests together
 npm run test:e2e:all
 
-# 5. For comprehensive testing (CI equivalent)
+# 5. Run File API specific tests
+npm run test:e2e:files
+
+# 6. For comprehensive testing (CI equivalent)
 npm run ci:full
 ```
 
 ### Critical Testing Areas
 
 - **OpenAI API Compatibility**: The `/v1/chat/completions` endpoint must maintain full compatibility with OpenAI client libraries
+- **File API Compatibility**: The `/v1/files` endpoints must maintain full compatibility with OpenAI File API
 - **Streaming Responses**: Server-Sent Events (SSE) format must be correct and properly formatted
 - **Authentication**: Bearer token validation and session management
 - **Error Handling**: Proper OpenAI-compatible error responses
 - **Client Library Integration**: Real-world usage patterns from Python and Node.js OpenAI clients
+- **File Processing**: Both file_id and file_data content types must work correctly in chat completions
 
 ### Manual Testing Verification
 
@@ -120,9 +162,32 @@ curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-code", "messages": [{"role": "user", "content": "Test"}], "stream": true}' \
   | grep "data:" | head -5
+
+# Test File API upload
+curl -X POST http://localhost:3000/v1/files \
+  -F "file=@package.json;filename=test.json" \
+  -F "purpose=assistants"
+
+# Test File API with chat completions
+FILE_ID="file-your-uploaded-file-id"
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"model\": \"claude-code\",
+    \"messages\": [
+      {
+        \"role\": \"user\",
+        \"content\": [
+          {\"type\": \"text\", \"text\": \"allowed-tools=[\\\"Read\\\"] What is in this file?\"},
+          {\"type\": \"file\", \"file\": {\"file_id\": \"$FILE_ID\"}}
+        ]
+      }
+    ],
+    \"stream\": true
+  }" | head -10
 ```
 
-**Never skip E2E tests when modifying OpenAI compatibility features!**
+**Never skip E2E tests when modifying OpenAI compatibility features or File API!**
 
 ## Architecture Overview
 
@@ -160,7 +225,13 @@ The server follows a modular architecture with clear separation of concerns:
    - Builds prompts with absolute file paths for Claude access
    - Supports 200+ file formats via magic number detection
 
-7. **openai-transformer.ts** - OpenAI API compatibility layer:
+7. **file-storage.ts** - File API storage management:
+   - Manages OpenAI-compatible file upload and storage
+   - Handles file metadata (ID, filename, size, creation time, full path)
+   - Stores files with UUID-based naming for security
+   - Provides file_id to file path resolution
+
+8. **openai-transformer.ts** - OpenAI API compatibility layer:
    - Transforms OpenAI requests to Claude API format
    - Extracts session information and configuration from messages
    - Processes file content parts and image_url content

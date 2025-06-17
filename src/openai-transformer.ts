@@ -6,6 +6,7 @@ import { OpenAIMessage, OpenAIRequest, SessionInfo } from './types';
 import { fileProcessor } from './file-processor';
 import { createWorkspace } from './session-manager';
 import { serverLogger } from './logger';
+import { fileStorage } from './file-storage';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -208,47 +209,71 @@ export class OpenAITransformer {
                 `Image processed from image_url: ${filename}`
               );
             } else if (contentPart.type === 'file' && contentPart.file) {
-              // Process file content part (new functionality)
-              const { file_data, filename } = contentPart.file;
+              // Process file content part
+              const { file_id, file_data, filename } = contentPart.file;
 
-              if (!file_data) {
+              if (file_id) {
+                // Handle file_id - get full path from file storage
+                const fullPath = await fileStorage.getFilePath(file_id);
+                if (fullPath) {
+                  filePaths.push(fullPath); // Use full path directly
+                  
+                  serverLogger.info(
+                    {
+                      type: 'file_processed',
+                      file_id,
+                      source: 'file_id',
+                      fullPath,
+                    },
+                    `File processed from file_id: ${file_id}`
+                  );
+                } else {
+                  serverLogger.warn(
+                    {
+                      type: 'file_not_found',
+                      file_id,
+                    },
+                    `File not found for file_id: ${file_id}`
+                  );
+                }
+              } else if (file_data) {
+                // Handle file_data - existing functionality
+                try {
+                  // Decode base64 file data
+                  const fileBuffer = Buffer.from(file_data, 'base64');
+                  const fileId = uuidv4();
+                  const safeFilename = filename || `file_${fileId}`;
+                  const filePath = path.join(workspacePath, safeFilename);
+
+                  await fs.writeFile(filePath, fileBuffer);
+                  filePaths.push(filePath);
+
+                  serverLogger.info(
+                    {
+                      type: 'file_processed',
+                      filename: safeFilename,
+                      source: 'file_data',
+                      size: fileBuffer.length,
+                    },
+                    `File processed from file_data: ${safeFilename}`
+                  );
+                } catch (error) {
+                  serverLogger.error(
+                    {
+                      type: 'file_data_decode_error',
+                      filename,
+                      error: error instanceof Error ? error.message : 'Unknown error',
+                    },
+                    `Failed to decode file_data for: ${filename}`
+                  );
+                }
+              } else {
                 serverLogger.warn(
                   {
-                    type: 'file_data_missing',
+                    type: 'file_missing_data',
                     filename,
                   },
-                  'File content part missing file_data'
-                );
-                continue;
-              }
-
-              try {
-                // Decode base64 file data
-                const fileBuffer = Buffer.from(file_data, 'base64');
-                const fileId = uuidv4();
-                const safeFilename = filename || `file_${fileId}`;
-                const filePath = path.join(workspacePath, safeFilename);
-
-                await fs.writeFile(filePath, fileBuffer);
-                filePaths.push(filePath);
-
-                serverLogger.info(
-                  {
-                    type: 'file_processed',
-                    filename: safeFilename,
-                    source: 'file_data',
-                    size: fileBuffer.length,
-                  },
-                  `File processed from file_data: ${safeFilename}`
-                );
-              } catch (error) {
-                serverLogger.error(
-                  {
-                    type: 'file_data_decode_error',
-                    filename,
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                  },
-                  `Failed to decode file_data for: ${filename}`
+                  'File content part missing both file_id and file_data'
                 );
               }
             }

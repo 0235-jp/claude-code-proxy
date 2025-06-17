@@ -21,6 +21,7 @@ Claude Code Proxy is a Fastify-based HTTP proxy server that wraps the Claude Cod
 - **MCP Support**: Integration with Model Context Protocol for external tools
 - **Session Management**: Resume conversations with Claude Code sessions
 - **OpenAI API Compatible**: Drop-in replacement for OpenAI chat completions
+- **File API**: OpenAI-compatible file upload and management API
 - **Permission Control**: Fine-grained tool permission management
 - **Structured Logging**: Comprehensive logging with security and performance monitoring
 
@@ -48,6 +49,7 @@ claude-code-proxy/
 │   ├── server.ts           # Fastify server with API endpoints
 │   ├── claude-executor.ts  # Claude Code execution with MCP support
 │   ├── file-processor.ts   # File and image processing utilities
+│   ├── file-storage.ts     # File API storage management
 │   ├── openai-transformer.ts # OpenAI API compatibility layer
 │   ├── session-manager.ts  # Workspace management
 │   ├── mcp-manager.ts      # MCP configuration handling
@@ -65,6 +67,7 @@ claude-code-proxy/
 ├── .env.example           # Environment variables template
 ├── mcp-config.json        # MCP server configuration (gitignored)
 ├── mcp-config.json.example # MCP configuration template
+├── files/                 # Uploaded files storage (gitignored)
 ├── shared_workspace/      # Default workspace (gitignored)
 └── workspace/             # Custom workspaces (gitignored)
     ├── project-a/
@@ -254,6 +257,101 @@ curl -X PUT http://localhost:3000/process \
   -H "Authorization: Bearer sk-your-api-key-here" \
   --data-binary @document.pdf
 ```
+
+## File API (OpenAI Compatible)
+
+### Overview
+
+Claude Code Proxy provides OpenAI-compatible File API endpoints for uploading and managing files. Files can be referenced in chat completions using `file_id`, allowing Claude to access and analyze uploaded content.
+
+### POST /v1/files (File Upload)
+
+Upload files for use in chat completions.
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/v1/files \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  -F "file=@document.pdf;filename=analysis.pdf" \
+  -F "purpose=assistants"
+```
+
+**Response:**
+```json
+{
+  "id": "file-486ba7b5f60745949eb8f01350a43c8e",
+  "object": "file",
+  "bytes": 12345,
+  "filename": "analysis.pdf",
+  "purpose": "assistants",
+  "created_at": 1750140117
+}
+```
+
+### GET /v1/files/:fileId (File Metadata)
+
+Retrieve metadata for a previously uploaded file.
+
+**Request:**
+```bash
+curl http://localhost:3000/v1/files/file-486ba7b5f60745949eb8f01350a43c8e \
+  -H "Authorization: Bearer sk-your-api-key-here"
+```
+
+**Response:**
+```json
+{
+  "id": "file-486ba7b5f60745949eb8f01350a43c8e",
+  "object": "file",
+  "bytes": 12345,
+  "filename": "analysis.pdf",
+  "purpose": "assistants",
+  "created_at": 1750140117
+}
+```
+
+### Using Files in Chat Completions
+
+Reference uploaded files in chat messages using the `file_id`:
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  -d '{
+    "model": "claude-code",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text", 
+            "text": "allowed-tools=[\"Read\"] Analyze this document and summarize its contents"
+          },
+          {
+            "type": "file",
+            "file": {
+              "file_id": "file-486ba7b5f60745949eb8f01350a43c8e"
+            }
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }'
+```
+
+**Supported Content Types:**
+- **file_id**: Reference to a previously uploaded file
+- **file_data**: Base64-encoded file data (existing functionality)
+- Both methods work seamlessly and can be mixed within the same conversation
+
+**File Processing:**
+- Files are stored in the `files/` directory with UUID-based naming
+- Claude Code accesses files using their full system path
+- No workspace copying - files are referenced directly from storage location
+- Supports all file types that Claude Code can process
 
 ## MCP (Model Context Protocol) Support
 

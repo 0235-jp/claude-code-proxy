@@ -23,11 +23,14 @@ import { errorHandler, InvalidRequestError, createStreamingError, ErrorCode } fr
 import {
   claudeApiValidationSchema,
   openAIApiValidationSchema,
+  fileUploadValidationSchema,
+  fileMetadataValidationSchema,
   createValidationPreHandler,
 } from './middleware/request-validator';
+import { fileStorage } from './file-storage';
 
 // Cache for file-type module to avoid repeated dynamic imports
-let fileTypeFromBuffer: ((buffer: Buffer) => Promise<any>) | null = null;
+let fileTypeFromBuffer: ((buffer: Buffer) => Promise<{ ext: string; mime: string } | undefined>) | null = null;
 
 /**
  * Initialize file-type module once during server startup
@@ -161,6 +164,9 @@ async function startServer(): Promise<void> {
 
   // Initialize file-type module for optimal performance
   await initializeFileType();
+
+  // Initialize file storage for OpenAI File API
+  await fileStorage.initialize();
 
   // Health check endpoint
   server.get('/health', async (_request, reply) => {
@@ -609,6 +615,136 @@ async function startServer(): Promise<void> {
             message: 'Failed to process document',
           });
         }
+      }
+    }
+  );
+
+  // OpenAI File API endpoints
+  // Upload file endpoint
+  server.post(
+    '/v1/files',
+    {
+      preHandler: [authenticateRequest, createValidationPreHandler()],
+      schema: fileUploadValidationSchema,
+    },
+    async (request, reply) => {
+      const requestLogger = createRequestLogger('file-upload', request.id);
+      const perfLogger = new PerformanceLogger(requestLogger, 'file-upload-request');
+
+      try {
+        const data = await request.file();
+        
+        if (!data) {
+          throw new InvalidRequestError(
+            'No file provided',
+            { requestId: request.id, endpoint: '/v1/files' },
+            ErrorCode.INVALID_REQUEST
+          );
+        }
+
+        // Get file buffer
+        const fileBuffer = await data.toBuffer();
+        
+        // Get filename from the form
+        const filename = data.filename || 'unknown';
+        
+        // Get purpose from fields (default to 'assistants')
+        const purpose = 'assistants'; // For now, default to 'assistants'
+
+        // Save file
+        const metadata = await fileStorage.saveFile(fileBuffer, filename, purpose);
+
+        requestLogger.info(
+          {
+            type: 'file_uploaded',
+            fileId: metadata.id,
+            filename: metadata.filename,
+            bytes: metadata.bytes,
+            purpose: metadata.purpose,
+          },
+          `File uploaded: ${metadata.id}`
+        );
+
+        perfLogger.finish('success');
+        reply.send(fileStorage.toApiResponse(metadata));
+      } catch (error) {
+        requestLogger.error(
+          {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            type: 'file_upload_error',
+          },
+          'File upload failed'
+        );
+        perfLogger.finish('error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        if (error instanceof InvalidRequestError) {
+          reply.code(400).send({
+            error: 'Bad Request',
+            message: error.message,
+          });
+        } else {
+          reply.code(500).send({
+            error: 'Internal Server Error',
+            message: 'Failed to upload file',
+          });
+        }
+      }
+    }
+  );
+
+  // Get file metadata endpoint
+  server.get<{ Params: { fileId: string } }>(
+    '/v1/files/:fileId',
+    {
+      preHandler: [authenticateRequest, createValidationPreHandler()],
+      schema: fileMetadataValidationSchema,
+    },
+    async (request, reply) => {
+      const { fileId } = request.params;
+      const requestLogger = createRequestLogger('file-metadata', request.id);
+      const perfLogger = new PerformanceLogger(requestLogger, 'file-metadata-request');
+
+      try {
+        const metadata = await fileStorage.getFileMetadata(fileId);
+        
+        if (!metadata) {
+          reply.code(404).send({
+            error: 'Not Found',
+            message: `File not found: ${fileId}`,
+          });
+          return;
+        }
+
+        requestLogger.info(
+          {
+            type: 'file_metadata_retrieved',
+            fileId,
+            filename: metadata.filename,
+          },
+          `File metadata retrieved: ${fileId}`
+        );
+
+        perfLogger.finish('success');
+        reply.send(fileStorage.toApiResponse(metadata));
+      } catch (error) {
+        requestLogger.error(
+          {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            type: 'file_metadata_error',
+            fileId,
+          },
+          'Failed to retrieve file metadata'
+        );
+        perfLogger.finish('error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        reply.code(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to retrieve file metadata',
+        });
       }
     }
   );

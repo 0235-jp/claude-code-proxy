@@ -35,7 +35,8 @@ export interface OpenAIMessage {
           detail?: 'low' | 'high' | 'auto';
         };
         file?: {
-          file_data: string; // base64 encoded file data
+          file_id?: string; // ID of an uploaded file
+          file_data?: string; // base64 encoded file data
           filename?: string;
         };
       }>;
