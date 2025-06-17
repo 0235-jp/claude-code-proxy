@@ -2,8 +2,13 @@
  * File processing utilities for URL/Data URI handling
  */
 
-import { FileUploadRequest } from './types';
 import { serverLogger } from './logger';
+
+interface ProcessedFile {
+  file: Buffer;
+  filename: string;
+  contentType: string;
+}
 
 /**
  * File processor for handling various file input formats
@@ -68,9 +73,9 @@ export class FileProcessor {
   }
 
   /**
-   * Process data URI and convert to file upload request
+   * Process data URI and convert to processed file
    */
-  static processDataUri(dataUri: string): FileUploadRequest {
+  static processDataUri(dataUri: string): ProcessedFile {
     serverLogger.debug(
       {
         type: 'data_uri_processing',
@@ -95,11 +100,10 @@ export class FileProcessor {
       // Generate filename
       const filename = this.generateFilenameFromContentType(contentType);
 
-      const result: FileUploadRequest = {
+      const result: ProcessedFile = {
         file: buffer,
         filename,
         contentType,
-        purpose: 'assistants',
       };
 
       serverLogger.info(
@@ -128,9 +132,9 @@ export class FileProcessor {
   }
 
   /**
-   * Download file from URL and convert to file upload request
+   * Download file from URL and convert to processed file
    */
-  static async processUrl(url: string): Promise<FileUploadRequest> {
+  static async processUrl(url: string): Promise<ProcessedFile> {
     serverLogger.debug(
       {
         type: 'url_processing',
@@ -159,11 +163,10 @@ export class FileProcessor {
       // Extract filename from URL
       const filename = this.extractFilenameFromUrl(url);
 
-      const result: FileUploadRequest = {
+      const result: ProcessedFile = {
         file: buffer,
         filename,
         contentType,
-        purpose: 'assistants',
       };
 
       serverLogger.info(
@@ -196,9 +199,9 @@ export class FileProcessor {
   /**
    * Process any file input (data URI, URL, or already processed file)
    */
-  static async processFileInput(input: string | FileUploadRequest): Promise<FileUploadRequest> {
+  static async processFileInput(input: string | ProcessedFile): Promise<ProcessedFile> {
     if (typeof input === 'object') {
-      // Already a FileUploadRequest
+      // Already a ProcessedFile
       return input;
     }
 

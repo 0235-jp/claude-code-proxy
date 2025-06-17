@@ -28,18 +28,17 @@ export interface OpenAIMessage {
   content:
     | string
     | Array<{
-        type: 'text' | 'image_url';
+        type: 'text' | 'image_url' | 'file';
         text?: string;
         image_url?: {
           url: string;
           detail?: 'low' | 'high' | 'auto';
         };
+        file?: {
+          file_data: string; // base64 encoded file data
+          filename?: string;
+        };
       }>;
-}
-
-export interface FileReference {
-  id: string;
-  name: string;
 }
 
 export interface OpenAIRequest {
@@ -48,32 +47,6 @@ export interface OpenAIRequest {
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
-  files?: FileReference[];
-}
-
-export interface FileUploadRequest {
-  file: Buffer;
-  filename: string;
-  contentType: string;
-  purpose: string;
-}
-
-export interface FileRecord {
-  id: string;
-  filename: string;
-  path: string;
-  contentType: string;
-  size: number;
-  uploadedAt: Date;
-}
-
-export interface OpenAIFile {
-  id: string;
-  object: 'file';
-  bytes: number;
-  filename: string;
-  purpose: string;
-  created_at: number;
 }
 
 export interface McpConfig {

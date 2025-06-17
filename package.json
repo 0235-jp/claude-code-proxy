@@ -7,12 +7,14 @@
     "@fastify/multipart": "^8.x",
     "dotenv": "^16.x",
     "fastify": "^4.x",
-    "pino": "^8.x"
+    "pino": "^8.x",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "^20.x",
     "@types/supertest": "^6.0.3",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.x",
     "@typescript-eslint/parser": "^6.x",
     "eslint": "^8.x",

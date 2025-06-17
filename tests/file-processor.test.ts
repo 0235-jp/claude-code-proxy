@@ -112,7 +112,6 @@ describe('FileProcessor', () => {
         file: Buffer.from('Hello World'),
         filename: expect.stringMatching(/^file_\d+\.txt$/),
         contentType: 'text/plain',
-        purpose: 'assistants',
       });
     });
 
@@ -125,7 +124,6 @@ describe('FileProcessor', () => {
         file: Buffer.from(imageData, 'base64'),
         filename: expect.stringMatching(/^file_\d+\.png$/),
         contentType: 'image/png',
-        purpose: 'assistants',
       });
     });
 
@@ -154,7 +152,6 @@ describe('FileProcessor', () => {
         file: expect.any(Buffer),
         filename: 'file.txt',
         contentType: 'text/plain',
-        purpose: 'assistants',
       });
       expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt');
     });

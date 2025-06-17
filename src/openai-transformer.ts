@@ -4,9 +4,11 @@
 
 import { OpenAIMessage, OpenAIRequest, SessionInfo } from './types';
 import { fileProcessor } from './file-processor';
-import { fileManager } from './file-manager';
 import { createWorkspace } from './session-manager';
 import { serverLogger } from './logger';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Handles transformation between OpenAI and Claude API formats
@@ -182,55 +184,74 @@ export class OpenAITransformer {
     const filePaths: string[] = [];
 
     try {
-      // Process image_url content from messages
+      // Process message content for files and images
       for (const message of openAIRequest.messages) {
         if (message.role === 'user' && Array.isArray(message.content)) {
-          const imageUrls = fileProcessor.extractImageUrls(message.content);
+          for (const contentPart of message.content) {
+            if (contentPart.type === 'image_url' && contentPart.image_url) {
+              // Process image_url (existing functionality)
+              const fileUpload = await fileProcessor.processFileInput(contentPart.image_url.url);
+              const fileId = uuidv4();
+              const filename = `image_${fileId}.${this.getImageExtension(contentPart.image_url.url)}`;
+              const filePath = path.join(workspacePath, filename);
 
-          for (const imageUrl of imageUrls) {
-            const fileUpload = await fileProcessor.processFileInput(imageUrl);
-            const fileRecord = await fileManager.saveFile(workspacePath, fileUpload);
-            const relativePath = fileManager.getRelativeFilePath(fileRecord, workspacePath);
-            filePaths.push(relativePath);
+              await fs.writeFile(filePath, fileUpload.file);
+              filePaths.push(`./${filename}`);
 
-            serverLogger.info(
-              {
-                type: 'image_processed',
-                fileId: fileRecord.id,
-                filename: fileRecord.filename,
-                source: 'image_url',
-              },
-              `Image processed from image_url: ${fileRecord.filename}`
-            );
-          }
-        }
-      }
+              serverLogger.info(
+                {
+                  type: 'image_processed',
+                  filename,
+                  source: 'image_url',
+                  size: fileUpload.file.length,
+                },
+                `Image processed from image_url: ${filename}`
+              );
+            } else if (contentPart.type === 'file' && contentPart.file) {
+              // Process file content part (new functionality)
+              const { file_data, filename } = contentPart.file;
 
-      // Process files parameter (OpenWebUI extension)
-      if (openAIRequest.files) {
-        for (const fileRef of openAIRequest.files) {
-          const fileRecord = fileManager.getFile(fileRef.id);
-          if (fileRecord) {
-            const relativePath = fileManager.getRelativeFilePath(fileRecord, workspacePath);
-            filePaths.push(relativePath);
+              if (!file_data) {
+                serverLogger.warn(
+                  {
+                    type: 'file_data_missing',
+                    filename,
+                  },
+                  'File content part missing file_data'
+                );
+                continue;
+              }
 
-            serverLogger.debug(
-              {
-                type: 'file_referenced',
-                fileId: fileRef.id,
-                filename: fileRef.name,
-              },
-              `File referenced: ${fileRef.name}`
-            );
-          } else {
-            serverLogger.warn(
-              {
-                type: 'file_not_found',
-                fileId: fileRef.id,
-                filename: fileRef.name,
-              },
-              `Referenced file not found: ${fileRef.id}`
-            );
+              try {
+                // Decode base64 file data
+                const fileBuffer = Buffer.from(file_data, 'base64');
+                const fileId = uuidv4();
+                const safeFilename = filename || `file_${fileId}`;
+                const filePath = path.join(workspacePath, safeFilename);
+
+                await fs.writeFile(filePath, fileBuffer);
+                filePaths.push(`./${safeFilename}`);
+
+                serverLogger.info(
+                  {
+                    type: 'file_processed',
+                    filename: safeFilename,
+                    source: 'file_data',
+                    size: fileBuffer.length,
+                  },
+                  `File processed from file_data: ${safeFilename}`
+                );
+              } catch (error) {
+                serverLogger.error(
+                  {
+                    type: 'file_data_decode_error',
+                    filename,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                  },
+                  `Failed to decode file_data for: ${filename}`
+                );
+              }
+            }
           }
         }
       }
@@ -246,6 +267,19 @@ export class OpenAITransformer {
     }
 
     return filePaths;
+  }
+
+  /**
+   * Get file extension from image URL or data URL
+   */
+  private static getImageExtension(url: string): string {
+    if (url.startsWith('data:image/')) {
+      const match = url.match(/data:image\/([^;]+)/);
+      return match ? match[1] : 'png';
+    }
+
+    const extension = path.extname(url).slice(1).toLowerCase();
+    return extension || 'png';
   }
 
   /**
