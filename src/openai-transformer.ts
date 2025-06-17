@@ -184,73 +184,72 @@ export class OpenAITransformer {
     const filePaths: string[] = [];
 
     try {
-      // Process message content for files and images
-      for (const message of openAIRequest.messages) {
-        if (message.role === 'user' && Array.isArray(message.content)) {
-          for (const contentPart of message.content) {
-            if (contentPart.type === 'image_url' && contentPart.image_url) {
-              // Process image_url (existing functionality)
-              const fileUpload = await fileProcessor.processFileInput(contentPart.image_url.url);
-              const fileId = uuidv4();
-              const filename = `image_${fileId}.${this.getImageExtension(contentPart.image_url.url)}`;
-              const filePath = path.join(workspacePath, filename);
+      // Process message content for files and images (only from the last user message)
+      const lastMessage = openAIRequest.messages[openAIRequest.messages.length - 1];
+      if (lastMessage && lastMessage.role === 'user' && Array.isArray(lastMessage.content)) {
+        for (const contentPart of lastMessage.content) {
+          if (contentPart.type === 'image_url' && contentPart.image_url) {
+            // Process image_url (existing functionality)
+            const fileUpload = await fileProcessor.processFileInput(contentPart.image_url.url);
+            const fileId = uuidv4();
+            const filename = `image_${fileId}.${this.getImageExtension(contentPart.image_url.url)}`;
+            const filePath = path.join(workspacePath, filename);
 
-              await fs.writeFile(filePath, fileUpload.file);
+            await fs.writeFile(filePath, fileUpload.file);
+            filePaths.push(filePath);
+
+            serverLogger.info(
+              {
+                type: 'image_processed',
+                filename,
+                source: 'image_url',
+                size: fileUpload.file.length,
+              },
+              `Image processed from image_url: ${filename}`
+            );
+          } else if (contentPart.type === 'file' && contentPart.file) {
+            // Process file content part (new functionality)
+            const { file_data, filename } = contentPart.file;
+
+            if (!file_data) {
+              serverLogger.warn(
+                {
+                  type: 'file_data_missing',
+                  filename,
+                },
+                'File content part missing file_data'
+              );
+              continue;
+            }
+
+            try {
+              // Decode base64 file data
+              const fileBuffer = Buffer.from(file_data, 'base64');
+              const fileId = uuidv4();
+              const safeFilename = filename || `file_${fileId}`;
+              const filePath = path.join(workspacePath, safeFilename);
+
+              await fs.writeFile(filePath, fileBuffer);
               filePaths.push(filePath);
 
               serverLogger.info(
                 {
-                  type: 'image_processed',
-                  filename,
-                  source: 'image_url',
-                  size: fileUpload.file.length,
+                  type: 'file_processed',
+                  filename: safeFilename,
+                  source: 'file_data',
+                  size: fileBuffer.length,
                 },
-                `Image processed from image_url: ${filename}`
+                `File processed from file_data: ${safeFilename}`
               );
-            } else if (contentPart.type === 'file' && contentPart.file) {
-              // Process file content part (new functionality)
-              const { file_data, filename } = contentPart.file;
-
-              if (!file_data) {
-                serverLogger.warn(
-                  {
-                    type: 'file_data_missing',
-                    filename,
-                  },
-                  'File content part missing file_data'
-                );
-                continue;
-              }
-
-              try {
-                // Decode base64 file data
-                const fileBuffer = Buffer.from(file_data, 'base64');
-                const fileId = uuidv4();
-                const safeFilename = filename || `file_${fileId}`;
-                const filePath = path.join(workspacePath, safeFilename);
-
-                await fs.writeFile(filePath, fileBuffer);
-                filePaths.push(filePath);
-
-                serverLogger.info(
-                  {
-                    type: 'file_processed',
-                    filename: safeFilename,
-                    source: 'file_data',
-                    size: fileBuffer.length,
-                  },
-                  `File processed from file_data: ${safeFilename}`
-                );
-              } catch (error) {
-                serverLogger.error(
-                  {
-                    type: 'file_data_decode_error',
-                    filename,
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                  },
-                  `Failed to decode file_data for: ${filename}`
-                );
-              }
+            } catch (error) {
+              serverLogger.error(
+                {
+                  type: 'file_data_decode_error',
+                  filename,
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                },
+                `Failed to decode file_data for: ${filename}`
+              );
             }
           }
         }
