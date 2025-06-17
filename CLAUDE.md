@@ -62,6 +62,12 @@ curl -X POST http://localhost:8080/api/claude \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $API_KEY" \
   -d '{"prompt": "List files"}'
+
+# External Document Loader endpoint (OpenWebUI integration)
+curl -X PUT http://localhost:3000/process \
+  -H "Content-Type: application/pdf" \
+  -H "Authorization: Bearer $API_KEY" \
+  --data-binary @document.pdf
 ```
 
 ## Testing Requirements
@@ -123,30 +129,41 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 ### Core Components
 The server follows a modular architecture with clear separation of concerns:
 
-1. **server.js** - Main Fastify server with three API endpoints:
+1. **server.ts** - Main Fastify server with four API endpoints:
    - `/health` - Health check endpoint for monitoring server status
    - `/api/claude` - Direct Claude Code API with all parameters in request body
    - `/v1/chat/completions` - OpenAI-compatible streaming endpoint
+   - `/process` - External Document Loader for OpenWebUI file integration
 
-2. **claude-executor.js** - Handles Claude CLI process execution:
+2. **claude-executor.ts** - Handles Claude CLI process execution:
    - Spawns `claude` CLI processes with appropriate flags
    - Manages configurable process timeouts (default: total 60 minutes, inactivity 5 minutes)
    - Combines regular tools with MCP tools for `--allowedTools` flag
 
-3. **session-manager.js** - Workspace isolation:
+3. **session-manager.ts** - Workspace isolation:
    - Creates `shared_workspace/` for default workspace
    - Creates `workspace/{name}/` for custom workspaces
 
-4. **mcp-manager.js** - MCP (Model Context Protocol) integration:
+4. **mcp-manager.ts** - MCP (Model Context Protocol) integration:
    - Loads `mcp-config.json` configuration at startup
    - Validates MCP tool names against configured servers
    - Enables external tool integration (e.g., GitHub, DeepWiki)
 
-5. **health-checker.js** - Health monitoring system:
+5. **health-checker.ts** - Health monitoring system:
    - Checks Claude CLI availability and version
    - Verifies workspace directory accessibility and permissions
    - Monitors MCP configuration status
    - Provides comprehensive system health reporting
+
+6. **file-processor.ts** - File and image processing utilities:
+   - Handles URLs, data URIs, and binary file processing
+   - Builds prompts with absolute file paths for Claude access
+   - Supports 200+ file formats via magic number detection
+
+7. **openai-transformer.ts** - OpenAI API compatibility layer:
+   - Transforms OpenAI requests to Claude API format
+   - Extracts session information and configuration from messages
+   - Processes file content parts and image_url content
 
 ### Key Architecture Patterns
 
@@ -161,6 +178,13 @@ The server follows a modular architecture with clear separation of concerns:
 **System Prompt Support**: Both endpoints support custom system prompts:
 - `/api/claude`: via `systemPrompt` parameter
 - `/v1/chat/completions`: via first message with role "system"
+
+**External Document Loader Integration**: The `/process` endpoint enables seamless OpenWebUI integration:
+- Accepts binary file uploads via PUT requests
+- Auto-detects file types using magic number analysis
+- Saves files with UUID naming to prevent conflicts
+- Returns absolute file paths for Claude Code to access
+- Integrates with OpenWebUI's RAG system via `<source>` tag injection
 
 ### Configuration Files
 - `mcp-config.json` - MCP server configurations (create from `mcp-config.json.example`)
