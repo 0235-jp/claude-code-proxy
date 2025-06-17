@@ -261,15 +261,12 @@ async function startServer(): Promise<void> {
           const processedFiles: string[] = [];
 
           for (const filePath of files) {
-            // Convert absolute paths to relative paths if needed
-            let relativePath = filePath;
-            if (path.isAbsolute(filePath)) {
-              relativePath = path.relative(workspacePath, filePath);
-              if (!relativePath.startsWith('.')) {
-                relativePath = `./${relativePath}`;
-              }
+            // Use absolute paths for Claude
+            let absolutePath = filePath;
+            if (!path.isAbsolute(filePath)) {
+              absolutePath = path.resolve(workspacePath, filePath);
             }
-            processedFiles.push(relativePath);
+            processedFiles.push(absolutePath);
           }
 
           // Build prompt with files

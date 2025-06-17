@@ -196,7 +196,7 @@ export class OpenAITransformer {
               const filePath = path.join(workspacePath, filename);
 
               await fs.writeFile(filePath, fileUpload.file);
-              filePaths.push(`./${filename}`);
+              filePaths.push(filePath);
 
               serverLogger.info(
                 {
@@ -230,7 +230,7 @@ export class OpenAITransformer {
                 const filePath = path.join(workspacePath, safeFilename);
 
                 await fs.writeFile(filePath, fileBuffer);
-                filePaths.push(`./${safeFilename}`);
+                filePaths.push(filePath);
 
                 serverLogger.info(
                   {
