@@ -34,6 +34,15 @@ export class StreamProcessor {
   }
 
   /**
+   * Escape nested code blocks in content to prevent breaking outer code blocks
+   */
+  private escapeNestedCodeBlocks(content: string): string {
+    // Replace triple backticks with spaced version to prevent breaking outer code blocks
+    // Using spaces between backticks to maintain readability while preventing parser conflicts
+    return content.replace(/```/g, '` ` `');
+  }
+
+  /**
    * Split text into chunks for streaming
    */
   private splitIntoChunks(text: string): string[] {
@@ -145,7 +154,7 @@ export class StreamProcessor {
         // Always show thinking content
         const fullText = this.showThinking
           ? `\n💭 ${thinkingContent}\n\n`
-          : `\n\`\`\`💭 Thinking\n${thinkingContent}\n\`\`\`\n\n`;
+          : `\n\`\`\`💭 Thinking\n${this.escapeNestedCodeBlocks(thinkingContent)}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -166,7 +175,7 @@ export class StreamProcessor {
         // Always show tool use content
         const fullText = this.showThinking
           ? `\n🔧 Using ${toolName}: ${toolInput}\n\n`
-          : `\n\`\`\`🔧 Tool use\nUsing ${toolName}: ${toolInput}\n\`\`\`\n\n`;
+          : `\n\`\`\`🔧 Tool use\nUsing ${toolName}: ${this.escapeNestedCodeBlocks(toolInput)}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -217,7 +226,7 @@ export class StreamProcessor {
         const resultType = isError ? 'Tool Error' : 'Tool Result';
         const fullText = this.showThinking
           ? prefix + displayContent + '\n\n'
-          : `\n\`\`\`${resultIcon} ${resultType}\n${displayContent}\n\`\`\`\n\n`;
+          : `\n\`\`\`${resultIcon} ${resultType}\n${this.escapeNestedCodeBlocks(displayContent)}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -264,7 +273,7 @@ export class StreamProcessor {
 
     const fullText = this.showThinking
       ? `⚠️ ${errorMessage}\n\n`
-      : `\n\`\`\`⚠️ Error\n${errorMessage}\n\`\`\`\n\n`;
+      : `\n\`\`\`⚠️ Error\n${this.escapeNestedCodeBlocks(errorMessage)}\n\`\`\`\n\n`;
     const chunks = this.splitIntoChunks(fullText);
     for (let i = 0; i < chunks.length; i++) {
       this.sendChunk(reply, chunks[i], i === chunks.length - 1 ? 'stop' : null);
@@ -288,7 +297,7 @@ export class StreamProcessor {
     const unknownContent = `Unknown data type '${jsonData.type}': ${JSON.stringify(jsonData, null, 2)}`;
     const unknownText = this.showThinking
       ? `\n🔍 ${unknownContent}\n\n`
-      : `\n\`\`\`🔍 Debug\n${unknownContent}\n\`\`\`\n\n`;
+      : `\n\`\`\`🔍 Debug\n${this.escapeNestedCodeBlocks(unknownContent)}\n\`\`\`\n\n`;
 
     if (this.showThinking) {
       // Show thinking tags when enabled
