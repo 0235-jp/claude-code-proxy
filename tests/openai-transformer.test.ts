@@ -34,7 +34,6 @@ Processing...
         dangerouslySkipPermissions: true,
         allowedTools: ['read', 'write'],
         disallowedTools: ['execute'],
-        mcpAllowedTools: ['github'],
       });
     });
 
@@ -119,14 +118,13 @@ Processing...
     });
 
     it('should handle all tool configurations', () => {
-      const message = 'allowed-tools=["A","B"] disallowed-tools=["C"] mcp-allowed-tools=["D","E"] Do something';
+      const message = 'allowed-tools=["A","B","mcp__server__tool"] disallowed-tools=["C"] Do something';
 
       const { config, cleanedPrompt } = OpenAITransformer.extractMessageConfig(message);
 
       expect(config).toEqual({
-        allowedTools: ['A', 'B'],
+        allowedTools: ['A', 'B', 'mcp__server__tool'],
         disallowedTools: ['C'],
-        mcpAllowedTools: ['D', 'E'],
       });
       expect(cleanedPrompt).toBe('Do something');
     });
@@ -252,7 +250,6 @@ Processing...
         session_id: '79c3a212-7fc2-47ea-9066-c5e5371950b9',
         allowedTools: ['mcp__deepwiki__read_wiki_structure', 'mcp__deepwiki__read_wiki_content', 'mcp_deepwiki__ask_question'], // Should be preserved from previous
         disallowedTools: ['Task'], // Should be updated from current message
-        mcpAllowedTools: ['mcp__deepwiki__read_wiki_structure', 'mcp__deepwiki__read_wiki_content', 'mcp_deepwiki__ask_question'], // Should be preserved from previous
       });
       expect(result.filePaths).toEqual([]);
     });
@@ -289,9 +286,8 @@ Processing...
         session_id: 'test-123',
         workspace: 'my-project',
         dangerouslySkipPermissions: false,
-        allowedTools: ['Read', 'Write'],
+        allowedTools: ['Read', 'Write', 'mcp__github__listRepos'],
         disallowedTools: ['Execute'],
-        mcpAllowedTools: ['github', 'slack'],
       };
 
       const formatted = OpenAITransformer.formatSessionInfo(sessionInfo);
@@ -300,9 +296,8 @@ Processing...
         'session-id=test-123\n' +
         'workspace=my-project\n' +
         'dangerously-skip-permissions=false\n' +
-        'allowed-tools=["Read","Write"]\n' +
-        'disallowed-tools=["Execute"]\n' +
-        'mcp-allowed-tools=["github","slack"]\n'
+        'allowed-tools=["Read","Write","mcp__github__listRepos"]\n' +
+        'disallowed-tools=["Execute"]\n'
       );
     });
 

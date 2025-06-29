@@ -97,7 +97,6 @@ async function createTestServer() {
     const systemPrompt = request.body['system-prompt'];
     const allowedTools = request.body['allowed-tools'];
     const disallowedTools = request.body['disallowed-tools'];
-    const mcpAllowedTools = request.body['mcp-allowed-tools'];
     const dangerouslySkipPermissions = request.body['dangerously-skip-permissions'];
 
     // Test server behavior without logging user data for security
@@ -119,7 +118,7 @@ async function createTestServer() {
           ...(dangerouslySkipPermissions !== undefined && { dangerouslySkipPermissions }),
           ...(allowedTools && { allowedTools }),
           ...(disallowedTools && { disallowedTools }),
-          ...(mcpAllowedTools && { mcpAllowedTools }),
+          ...(allowedTools && { allowedTools }),
         },
         reply
       );
@@ -135,7 +134,7 @@ async function createTestServer() {
           ...(dangerouslySkipPermissions !== undefined && { dangerouslySkipPermissions }),
           ...(allowedTools && { allowedTools }),
           ...(disallowedTools && { disallowedTools }),
-          ...(mcpAllowedTools && { mcpAllowedTools }),
+          ...(allowedTools && { allowedTools }),
         },
         reply
       );
@@ -192,7 +191,6 @@ async function createTestServer() {
     let prev_dangerously_skip_permissions: boolean | null = null;
     let prev_allowedTools: string[] | null = null;
     let prev_disallowedTools: string[] | null = null;
-    let prev_mcpAllowedTools: string[] | null = null;
 
     for (let i = messages.length - 2; i >= messageStartIndex; i--) {
       if (messages[i].role === 'assistant') {
@@ -224,7 +222,7 @@ async function createTestServer() {
 
         const mcpAllowedMatch = content.match(/mcp-allowed-tools=\[([^\]]+)\]/);
         if (mcpAllowedMatch) {
-          prev_mcpAllowedTools = mcpAllowedMatch[1]
+          prev_allowedTools = mcpAllowedMatch[1]
             .split(',')
             .map((tool: string) => tool.trim().replace(/['"]/g, ''));
         }
@@ -250,11 +248,6 @@ async function createTestServer() {
     const disallowedTools = disallowedMatch
       ? disallowedMatch[1].split(',').map((tool: string) => tool.trim().replace(/['"]/g, ''))
       : prev_disallowedTools;
-
-    const mcpAllowedMatch = userMessage.match(/mcp-allowed-tools=\[([^\]]+)\]/);
-    const mcpAllowedTools = mcpAllowedMatch
-      ? mcpAllowedMatch[1].split(',').map((tool: string) => tool.trim().replace(/['"]/g, ''))
-      : prev_mcpAllowedTools;
 
     // Extract prompt
     const promptMatch = userMessage.match(/prompt="([^"]+)"/);
@@ -284,7 +277,7 @@ async function createTestServer() {
           ...(dangerouslySkipPermissions !== null && { dangerouslySkipPermissions }),
           ...(allowedTools && { allowedTools }),
           ...(disallowedTools && { disallowedTools }),
-          ...(mcpAllowedTools && { mcpAllowedTools }),
+          ...(allowedTools && { allowedTools }),
         },
         reply
       );
@@ -308,7 +301,7 @@ async function createTestServer() {
           ...(dangerouslySkipPermissions !== null && { dangerouslySkipPermissions }),
           ...(allowedTools && { allowedTools }),
           ...(disallowedTools && { disallowedTools }),
-          ...(mcpAllowedTools && { mcpAllowedTools }),
+          ...(allowedTools && { allowedTools }),
         },
         reply
       );
@@ -347,9 +340,8 @@ describe('Server Unit Tests', () => {
           'session-id': 'test-session',
           workspace: 'my-workspace',
           'system-prompt': 'You are helpful',
-          'allowed-tools': ['bash', 'edit'],
+          'allowed-tools': ['bash', 'edit', 'mcp__github__list'],
           'disallowed-tools': ['web'],
-          'mcp-allowed-tools': ['mcp__github__list'],
           'dangerously-skip-permissions': true,
         },
       });
@@ -366,9 +358,8 @@ describe('Server Unit Tests', () => {
         {
           workspace: 'my-workspace',
           systemPrompt: 'You are helpful',
-          allowedTools: ['bash', 'edit'],
+          allowedTools: ['bash', 'edit', 'mcp__github__list'],
           disallowedTools: ['web'],
-          mcpAllowedTools: ['mcp__github__list'],
           dangerouslySkipPermissions: true,
         },
         expect.any(Object)
