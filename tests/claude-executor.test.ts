@@ -273,7 +273,7 @@ describe('claude-executor', () => {
 
     it('should add MCP configuration when enabled', async () => {
       const reply = createMockReply();
-      const options = { mcpAllowedTools: ['mcp__github__listRepos'] };
+      const options = { allowedTools: ['mcp__github__listRepos'] };
 
       mockIsMcpEnabled.mockReturnValue(true);
       mockValidateMcpTools.mockReturnValue(['mcp__github__listRepos']);
@@ -577,7 +577,7 @@ describe('claude-executor', () => {
   describe('error conditions and edge cases', () => {
     it('should handle MCP tools when MCP is disabled', async () => {
       const reply = createMockReply();
-      const options = { mcpAllowedTools: ['mcp__tool'] };
+      const options = { allowedTools: ['mcp__tool'] };
 
       mockIsMcpEnabled.mockReturnValue(false);
 
@@ -598,7 +598,7 @@ describe('claude-executor', () => {
 
     it('should handle MCP validation returning empty array', async () => {
       const reply = createMockReply();
-      const options = { mcpAllowedTools: ['invalid-tool'] };
+      const options = { allowedTools: ['mcp__invalid__tool'] };
 
       mockIsMcpEnabled.mockReturnValue(true);
       mockValidateMcpTools.mockReturnValue([]); // No valid tools
@@ -606,7 +606,7 @@ describe('claude-executor', () => {
       const executePromise = executeClaudeAndStream('test prompt', null, options, reply as any);
       await Promise.resolve();
 
-      expect(mockValidateMcpTools).toHaveBeenCalledWith(['invalid-tool']);
+      expect(mockValidateMcpTools).toHaveBeenCalledWith(['mcp__invalid__tool']);
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
         expect.not.arrayContaining(['--mcp-config']),
@@ -620,7 +620,7 @@ describe('claude-executor', () => {
 
     it('should log MCP status when enabled', async () => {
       const reply = createMockReply();
-      const options = { mcpAllowedTools: ['mcp__test__tool'] };
+      const options = { allowedTools: ['mcp__test__tool'] };
 
       mockIsMcpEnabled.mockReturnValue(true);
       mockValidateMcpTools.mockReturnValue(['mcp__test__tool']);

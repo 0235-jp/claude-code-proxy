@@ -38,20 +38,29 @@ function executeClaudeCommand(
     args.push('--system-prompt', options.systemPrompt);
   }
 
-  // Collect all allowed tools (regular + MCP)
-  let allAllowedTools: string[] = [];
+  // Process allowed tools and separate MCP tools
+  let regularTools: string[] = [];
+  let mcpTools: string[] = [];
+  
   if (options.allowedTools && options.allowedTools.length > 0) {
-    allAllowedTools = [...options.allowedTools];
+    // Separate MCP tools from regular tools
+    options.allowedTools.forEach(tool => {
+      if (tool.startsWith('mcp__')) {
+        mcpTools.push(tool);
+      } else {
+        regularTools.push(tool);
+      }
+    });
   }
 
-  // Add MCP configuration if enabled and tools are requested
-  if (isMcpEnabled() && options.mcpAllowedTools && options.mcpAllowedTools.length > 0) {
-    const validMcpTools = validateMcpTools(options.mcpAllowedTools);
+  // Validate and add MCP configuration if MCP tools are present
+  let validMcpTools: string[] = [];
+  if (isMcpEnabled() && mcpTools.length > 0) {
+    validMcpTools = validateMcpTools(mcpTools);
     if (validMcpTools.length > 0) {
       const mcpConfigPath =
         process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json');
       args.push('--mcp-config', mcpConfigPath);
-      allAllowedTools = [...allAllowedTools, ...validMcpTools];
       executorLogger.info(
         {
           mcpTools: validMcpTools,
@@ -62,6 +71,9 @@ function executeClaudeCommand(
       );
     }
   }
+
+  // Combine all valid tools
+  const allAllowedTools = [...regularTools, ...validMcpTools];
 
   // Add combined allowed tools if any
   if (allAllowedTools.length > 0) {
@@ -233,6 +245,12 @@ export async function executeClaudeAndStream(
     workspacePath = await createWorkspace();
   }
 
+  // Separate MCP tools from regular tools for logging
+  let mcpToolsForLogging: string[] = [];
+  if (options.allowedTools) {
+    mcpToolsForLogging = options.allowedTools.filter(tool => tool.startsWith('mcp__'));
+  }
+
   // Create request-scoped logger for this execution
   const requestLogger = createRequestLogger('claude-execution');
 
@@ -248,7 +266,7 @@ export async function executeClaudeAndStream(
         dangerouslySkipPermissions: options.dangerouslySkipPermissions || false,
         allowedToolsCount: options.allowedTools?.length || 0,
         disallowedToolsCount: options.disallowedTools?.length || 0,
-        mcpAllowedToolsCount: options.mcpAllowedTools?.length || 0,
+        mcpToolsCount: mcpToolsForLogging.length,
       },
       type: 'execution_start',
     },
@@ -263,7 +281,7 @@ export async function executeClaudeAndStream(
       {
         mcpEnabled: true,
         serverCount,
-        requestedTools: options.mcpAllowedTools || [],
+        requestedMcpTools: mcpToolsForLogging,
         type: 'mcp_status',
       },
       `MCP enabled with ${serverCount} server(s) configured`

@@ -93,7 +93,7 @@ describe('Server Integration Tests', () => {
         dangerouslySkipPermissions: null,
         allowedTools: null,
         disallowedTools: null,
-        mcpAllowedTools: null,
+        allowedTools: null,
       },
     });
     
@@ -363,7 +363,7 @@ describe('Server Integration Tests', () => {
       expect(mockExecuteClaudeAndStream).toHaveBeenCalledWith(
         'Use MCP tools',
         null,
-        { mcpAllowedTools: ['mcp__github__listRepos'] },
+        { allowedTools: ['mcp__github__listRepos'] },
         expect.any(Object)
       );
     });
@@ -394,7 +394,7 @@ describe('Server Integration Tests', () => {
           dangerouslySkipPermissions: true,
           allowedTools: ['bash', 'edit'],
           disallowedTools: ['web'],
-          mcpAllowedTools: ['mcp__github__listRepos'],
+          allowedTools: ['mcp__github__listRepos'],
         },
         expect.any(Object)
       );
@@ -465,7 +465,7 @@ describe('Server Integration Tests', () => {
           dangerouslySkipPermissions: null,
           allowedTools: null,
           disallowedTools: null,
-          mcpAllowedTools: null,
+          allowedTools: null,
         },
       });
 
@@ -523,7 +523,7 @@ describe('Server Integration Tests', () => {
           dangerouslySkipPermissions: null,
           allowedTools: null,
           disallowedTools: null,
-          mcpAllowedTools: null,
+          allowedTools: null,
         },
       });
 
@@ -553,7 +553,7 @@ describe('Server Integration Tests', () => {
           dangerouslySkipPermissions: null,
           allowedTools: null,
           disallowedTools: null,
-          mcpAllowedTools: null,
+          allowedTools: null,
         },
       });
 
@@ -602,7 +602,7 @@ describe('Server Integration Tests', () => {
           dangerouslySkipPermissions: true,
           allowedTools: ['bash', 'edit'],
           disallowedTools: ['web'],
-          mcpAllowedTools: ['mcp__github__listRepos'],
+          allowedTools: ['mcp__github__listRepos'],
         },
       });
 
@@ -627,7 +627,7 @@ describe('Server Integration Tests', () => {
           dangerouslySkipPermissions: true,
           allowedTools: ['bash', 'edit'],
           disallowedTools: ['web'],
-          mcpAllowedTools: ['mcp__github__listRepos'],
+          allowedTools: ['mcp__github__listRepos'],
         },
         expect.any(Object)
       );

@@ -72,18 +72,6 @@ export class OpenAITransformer {
           }
         }
 
-        const mcpAllowedMatch = content.match(/(?:^|\s)mcp-allowed-tools=\[([^\]]*)\]/m);
-        if (mcpAllowedMatch) {
-          const matchContent = mcpAllowedMatch[1].trim();
-          if (matchContent) {
-            result.mcpAllowedTools = matchContent
-              .split(',')
-              .map(tool => tool.trim().replace(/['"]/g, ''))
-              .filter(tool => tool.length > 0);
-          } else {
-            result.mcpAllowedTools = [];
-          }
-        }
 
         // Stop at the first assistant message with session info
         if (foundSession) break;
@@ -138,18 +126,6 @@ export class OpenAITransformer {
       }
     }
 
-    const mcpAllowedMatch = userMessage.match(/(?:^|\s)mcp-allowed-tools=\[([^\]]*)\]/m);
-    if (mcpAllowedMatch) {
-      const content = mcpAllowedMatch[1].trim();
-      if (content) {
-        config.mcpAllowedTools = content
-          .split(',')
-          .map(tool => tool.trim().replace(/['"]/g, ''))
-          .filter(tool => tool.length > 0);
-      } else {
-        config.mcpAllowedTools = [];
-      }
-    }
 
     const thinkingMatch = userMessage.match(/(?:^|\s)thinking=(\w+)/m);
     if (thinkingMatch) {
@@ -168,7 +144,6 @@ export class OpenAITransformer {
         .replace(/(?:^|\s)dangerously-skip-permissions=\w+/gm, '')
         .replace(/(?:^|\s)allowed-tools=\[[^\]]*\]/gm, '')
         .replace(/(?:^|\s)disallowed-tools=\[[^\]]*\]/gm, '')
-        .replace(/(?:^|\s)mcp-allowed-tools=\[[^\]]*\]/gm, '')
         .replace(/(?:^|\s)thinking=\w+/gm, '')
         .replace(/(?:^|\s)prompt="[^"]+"/gm, '')
         .replace(/(?:^|\s)prompt=/gm, '')
@@ -300,6 +275,7 @@ export class OpenAITransformer {
 
     // Extract system prompt
     let systemPrompt: string | null = null;
+    let systemPromptConfig: Partial<SessionInfo> = {};
     let messageStartIndex = 0;
     if (messages.length > 0 && messages[0].role === 'system') {
       systemPrompt =
@@ -307,6 +283,10 @@ export class OpenAITransformer {
           ? messages[0].content
           : fileProcessor.extractTextContent(messages[0].content);
       messageStartIndex = 1;
+      
+      // Extract config from system prompt for first request
+      const { config } = this.extractMessageConfig(systemPrompt);
+      systemPromptConfig = config;
     }
 
     // Get the latest user message and extract text content
@@ -324,8 +304,9 @@ export class OpenAITransformer {
     // Extract config from current message
     const { config: currentConfig, cleanedPrompt } = this.extractMessageConfig(userMessage);
 
-    // Merge session info (current config takes precedence)
+    // Merge session info with precedence: current message > previous session > system prompt
     const sessionInfo: Partial<SessionInfo> = {
+      ...systemPromptConfig,
       ...previousSessionInfo,
       ...currentConfig,
     };
@@ -372,10 +353,6 @@ export class OpenAITransformer {
     if (sessionInfo.disallowedTools) {
       const toolsStr = sessionInfo.disallowedTools.map(tool => `"${tool}"`).join(',');
       info += `disallowed-tools=[${toolsStr}]\n`;
-    }
-    if (sessionInfo.mcpAllowedTools) {
-      const toolsStr = sessionInfo.mcpAllowedTools.map(tool => `"${tool}"`).join(',');
-      info += `mcp-allowed-tools=[${toolsStr}]\n`;
     }
     if (sessionInfo.showThinking !== null && sessionInfo.showThinking !== undefined) {
       info += `thinking=${sessionInfo.showThinking}\n`;

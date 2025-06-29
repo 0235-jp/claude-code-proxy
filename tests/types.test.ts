@@ -19,17 +19,15 @@ describe('types', () => {
         workspace: 'test-workspace',
         systemPrompt: 'You are a helpful assistant',
         dangerouslySkipPermissions: true,
-        allowedTools: ['tool1', 'tool2'],
+        allowedTools: ['tool1', 'tool2', 'mcp__github__listRepos'],
         disallowedTools: ['tool3'],
-        mcpAllowedTools: ['mcp__github__listRepos'],
       };
 
       expect(options.workspace).toBe('test-workspace');
       expect(options.systemPrompt).toBe('You are a helpful assistant');
       expect(options.dangerouslySkipPermissions).toBe(true);
-      expect(options.allowedTools).toEqual(['tool1', 'tool2']);
+      expect(options.allowedTools).toEqual(['tool1', 'tool2', 'mcp__github__listRepos']);
       expect(options.disallowedTools).toEqual(['tool3']);
-      expect(options.mcpAllowedTools).toEqual(['mcp__github__listRepos']);
     });
 
     it('should allow empty ClaudeOptions', () => {
@@ -46,9 +44,8 @@ describe('types', () => {
         workspace: 'test-workspace',
         'system-prompt': 'You are helpful',
         'dangerously-skip-permissions': true,
-        'allowed-tools': ['tool1'],
+        'allowed-tools': ['tool1', 'mcp__tool'],
         'disallowed-tools': ['tool2'],
-        'mcp-allowed-tools': ['mcp__tool'],
       };
 
       expect(request.prompt).toBe('Test prompt');
@@ -160,9 +157,8 @@ describe('types', () => {
         session_id: 'session-123',
         workspace: 'test-workspace',
         dangerouslySkipPermissions: true,
-        allowedTools: ['tool1', 'tool2'],
+        allowedTools: ['tool1', 'tool2', 'mcp__tool'],
         disallowedTools: ['tool3'],
-        mcpAllowedTools: ['mcp__tool'],
       };
 
       expect(info.session_id).toBe('session-123');

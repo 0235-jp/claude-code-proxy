@@ -8,7 +8,6 @@ export interface ClaudeOptions {
   dangerouslySkipPermissions?: boolean;
   allowedTools?: string[];
   disallowedTools?: string[];
-  mcpAllowedTools?: string[];
 }
 
 export interface ClaudeApiRequest {
@@ -19,7 +18,6 @@ export interface ClaudeApiRequest {
   'dangerously-skip-permissions'?: boolean;
   'allowed-tools'?: string[];
   'disallowed-tools'?: string[];
-  'mcp-allowed-tools'?: string[];
   files?: string[];
 }
 
@@ -59,7 +57,6 @@ export interface SessionInfo {
   dangerouslySkipPermissions?: boolean;
   allowedTools?: string[];
   disallowedTools?: string[];
-  mcpAllowedTools?: string[];
   showThinking?: boolean;
 }
 
