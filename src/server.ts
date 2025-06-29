@@ -216,7 +216,6 @@ async function startServer(): Promise<void> {
       const systemPrompt = request.body['system-prompt'];
       const allowedTools = request.body['allowed-tools'];
       const disallowedTools = request.body['disallowed-tools'];
-      const mcpAllowedTools = request.body['mcp-allowed-tools'];
       const dangerouslySkipPermissions = request.body['dangerously-skip-permissions'];
 
       // Create request-scoped logger
@@ -235,10 +234,8 @@ async function startServer(): Promise<void> {
             dangerouslySkipPermissions: dangerouslySkipPermissions || false,
             allowedToolsCount: allowedTools?.length || 0,
             disallowedToolsCount: disallowedTools?.length || 0,
-            mcpAllowedToolsCount: mcpAllowedTools?.length || 0,
             allowedTools: allowedTools || [],
             disallowedTools: disallowedTools || [],
-            mcpAllowedTools: mcpAllowedTools || [],
           },
           type: 'api_request',
         },
@@ -291,7 +288,6 @@ async function startServer(): Promise<void> {
             ...(dangerouslySkipPermissions !== undefined && { dangerouslySkipPermissions }),
             ...(allowedTools && { allowedTools }),
             ...(disallowedTools && { disallowedTools }),
-            ...(mcpAllowedTools && { mcpAllowedTools }),
           },
           reply
         );
@@ -356,7 +352,6 @@ async function startServer(): Promise<void> {
         dangerouslySkipPermissions,
         allowedTools,
         disallowedTools,
-        mcpAllowedTools,
       } = sessionInfo;
 
       // Create request-scoped logger for OpenAI API
@@ -375,12 +370,10 @@ async function startServer(): Promise<void> {
             dangerouslySkipPermissions: dangerouslySkipPermissions || false,
             allowedToolsCount: allowedTools?.length || 0,
             disallowedToolsCount: disallowedTools?.length || 0,
-            mcpAllowedToolsCount: mcpAllowedTools?.length || 0,
             messagesCount: messages?.length || 0,
             fileCount: filePaths?.length || 0,
             allowedTools: allowedTools || [],
             disallowedTools: disallowedTools || [],
-            mcpAllowedTools: mcpAllowedTools || [],
             files: filePaths || [],
           },
           type: 'api_request',
@@ -455,7 +448,6 @@ async function startServer(): Promise<void> {
               dangerouslySkipPermissions !== undefined && { dangerouslySkipPermissions }),
             ...(allowedTools && { allowedTools }),
             ...(disallowedTools && { disallowedTools }),
-            ...(mcpAllowedTools && { mcpAllowedTools }),
           },
           reply
         );
