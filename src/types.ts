@@ -57,21 +57,48 @@ export interface SessionInfo {
   showThinking?: boolean;
 }
 
+// Content block types based on Anthropic SDK
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface ThinkingBlock {
+  type: 'thinking';
+  thinking: string;
+}
+
+export interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+export interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: string;
+  is_error?: boolean;
+}
+
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
+
 export interface StreamJsonData {
-  type: string;
+  type: 'system' | 'assistant' | 'user' | 'result' | 'error' | string;
   subtype?: string;
   session_id?: string;
   message?: {
-    content?: Array<{
-      type: string;
-      text?: string;
-      thinking?: string;
-      name?: string;
-      input?: unknown;
-      content?: string;
-      is_error?: boolean;
-    }>;
+    content?: ContentBlock[];
     stop_reason?: string;
   };
+  // Result type specific fields
+  duration_ms?: number;
+  duration_api_ms?: number;
+  is_error?: boolean;
+  num_turns?: number;
+  result?: string;
+  total_cost_usd?: number;
+  // Error type specific field
   error?: string | { message: string };
 }
