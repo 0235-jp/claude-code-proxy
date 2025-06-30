@@ -281,7 +281,6 @@ describe('claude-executor', () => {
       const executePromise = executeClaudeAndStream('test prompt', null, options, reply as any);
       await Promise.resolve();
 
-      expect(mockValidateMcpTools).toHaveBeenCalledWith(['mcp__github__listRepos']);
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
         expect.arrayContaining([
@@ -596,20 +595,23 @@ describe('claude-executor', () => {
       await executePromise;
     });
 
-    it('should handle MCP validation returning empty array', async () => {
+    it('should add MCP config even for potentially invalid tools', async () => {
       const reply = createMockReply();
       const options = { allowedTools: ['mcp__invalid__tool'] };
 
       mockIsMcpEnabled.mockReturnValue(true);
-      mockValidateMcpTools.mockReturnValue([]); // No valid tools
 
       const executePromise = executeClaudeAndStream('test prompt', null, options, reply as any);
       await Promise.resolve();
 
-      expect(mockValidateMcpTools).toHaveBeenCalledWith(['mcp__invalid__tool']);
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
-        expect.not.arrayContaining(['--mcp-config']),
+        expect.arrayContaining([
+          '--mcp-config',
+          expect.stringContaining('mcp-config.json'),
+          '--allowedTools',
+          'mcp__invalid__tool'
+        ]),
         expect.any(Object)
       );
 

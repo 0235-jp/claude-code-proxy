@@ -5,7 +5,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import { createWorkspace } from './session-manager';
-import { isMcpEnabled, validateMcpTools, getMcpConfig } from './mcp-manager';
+import { isMcpEnabled, getMcpConfig } from './mcp-manager';
 import { ClaudeOptions } from './types';
 import { FastifyReply } from 'fastify';
 import { executorLogger, createRequestLogger, logProcessEvent } from './logger';
@@ -38,46 +38,25 @@ function executeClaudeCommand(
     args.push('--system-prompt', options.systemPrompt);
   }
 
-  // Process allowed tools and separate MCP tools
-  let regularTools: string[] = [];
-  let mcpTools: string[] = [];
-  
+  // Add allowed tools directly without validation
   if (options.allowedTools && options.allowedTools.length > 0) {
-    // Separate MCP tools from regular tools
-    options.allowedTools.forEach(tool => {
-      if (tool.startsWith('mcp__')) {
-        mcpTools.push(tool);
-      } else {
-        regularTools.push(tool);
-      }
-    });
+    args.push('--allowedTools', options.allowedTools.join(','));
   }
 
-  // Validate and add MCP configuration if MCP tools are present
-  let validMcpTools: string[] = [];
+  // Check for MCP tools and add MCP configuration if needed
+  const mcpTools = options.allowedTools?.filter(tool => tool.startsWith('mcp__')) || [];
   if (isMcpEnabled() && mcpTools.length > 0) {
-    validMcpTools = validateMcpTools(mcpTools);
-    if (validMcpTools.length > 0) {
-      const mcpConfigPath =
-        process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json');
-      args.push('--mcp-config', mcpConfigPath);
-      executorLogger.info(
-        {
-          mcpTools: validMcpTools,
-          toolCount: validMcpTools.length,
-          type: 'mcp_config',
-        },
-        'MCP enabled with validated tools'
-      );
-    }
-  }
-
-  // Combine all valid tools
-  const allAllowedTools = [...regularTools, ...validMcpTools];
-
-  // Add combined allowed tools if any
-  if (allAllowedTools.length > 0) {
-    args.push('--allowedTools', allAllowedTools.join(','));
+    const mcpConfigPath =
+      process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json');
+    args.push('--mcp-config', mcpConfigPath);
+    executorLogger.info(
+      {
+        mcpTools,
+        toolCount: mcpTools.length,
+        type: 'mcp_config',
+      },
+      'MCP enabled with requested tools'
+    );
   }
 
   if (options.disallowedTools && options.disallowedTools.length > 0) {
