@@ -5,19 +5,16 @@
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import { executeClaudeAndStream } from '../src/claude-executor';
-import { loadMcpConfig } from '../src/mcp-manager';
 import { performHealthCheck } from '../src/health-checker';
 import { authenticateRequest } from '../src/auth';
 import { AuthenticationError } from '../src/errors';
 
 // Mock dependencies
 jest.mock('../src/claude-executor');
-jest.mock('../src/mcp-manager');
 jest.mock('../src/health-checker');
 jest.mock('../src/auth');
 
 const mockExecuteClaudeAndStream = executeClaudeAndStream as jest.MockedFunction<typeof executeClaudeAndStream>;
-const mockLoadMcpConfig = loadMcpConfig as jest.MockedFunction<typeof loadMcpConfig>;
 const mockPerformHealthCheck = performHealthCheck as jest.MockedFunction<typeof performHealthCheck>;
 const mockAuthenticateRequest = authenticateRequest as jest.MockedFunction<typeof authenticateRequest>;
 
@@ -26,9 +23,6 @@ async function createTestServer() {
   const app = fastify({ logger: false });
   await app.register(cors);
 
-  // Mock MCP config loading
-  mockLoadMcpConfig.mockResolvedValue(null);
-  await mockLoadMcpConfig();
 
   // Health check endpoint
   app.get('/health', async (_request: any, reply: any) => {
@@ -60,11 +54,6 @@ async function createTestServer() {
           workspace: {
             status: 'unhealthy', 
             message: 'Health check failed',
-            timestamp: new Date().toISOString()
-          },
-          mcpConfig: {
-            status: 'unhealthy',
-            message: 'Health check failed', 
             timestamp: new Date().toISOString()
           }
         }
@@ -669,15 +658,6 @@ describe('Server Unit Tests', () => {
       await app.close();
     });
 
-    it('should handle loadMcpConfig errors', async () => {
-      mockLoadMcpConfig.mockRejectedValue(new Error('MCP config failed'));
-
-      // Should still create server even if MCP config fails
-      const app = await createTestServer();
-      expect(app).toBeDefined();
-
-      await app.close();
-    });
   });
 
   describe('Health Check Endpoint', () => {
@@ -699,11 +679,6 @@ describe('Server Unit Tests', () => {
             status: 'healthy',
             message: 'Workspace directory is accessible and writable',
             timestamp: '2025-06-14T16:25:58.965Z'
-          },
-          mcpConfig: {
-            status: 'healthy',
-            message: 'MCP is disabled (no configuration file found)',
-            timestamp: '2025-06-14T16:25:58.965Z'
           }
         }
       });
@@ -721,7 +696,6 @@ describe('Server Unit Tests', () => {
         checks: {
           claudeCli: { status: 'healthy' },
           workspace: { status: 'healthy' },
-          mcpConfig: { status: 'healthy' }
         }
       });
 
@@ -745,11 +719,6 @@ describe('Server Unit Tests', () => {
           workspace: {
             status: 'degraded',
             message: 'Workspace directory is readable but not writable',
-            timestamp: '2025-06-14T16:25:58.965Z'
-          },
-          mcpConfig: {
-            status: 'healthy',
-            message: 'MCP is disabled (no configuration file found)',
             timestamp: '2025-06-14T16:25:58.965Z'
           }
         }
@@ -785,11 +754,6 @@ describe('Server Unit Tests', () => {
           workspace: {
             status: 'healthy',
             message: 'Workspace directory is accessible and writable',
-            timestamp: '2025-06-14T16:25:58.965Z'
-          },
-          mcpConfig: {
-            status: 'healthy',
-            message: 'MCP is disabled (no configuration file found)',
             timestamp: '2025-06-14T16:25:58.965Z'
           }
         }
@@ -827,7 +791,6 @@ describe('Server Unit Tests', () => {
       });
       expect(payload.checks).toHaveProperty('claudeCli');
       expect(payload.checks).toHaveProperty('workspace');
-      expect(payload.checks).toHaveProperty('mcpConfig');
 
       await app.close();
     });
@@ -875,7 +838,6 @@ describe('Server Unit Tests', () => {
         checks: {
           claudeCli: { status: 'healthy', message: 'OK', timestamp: '2025-06-14T16:25:58.963Z' },
           workspace: { status: 'healthy', message: 'OK', timestamp: '2025-06-14T16:25:58.965Z' },
-          mcpConfig: { status: 'healthy', message: 'OK', timestamp: '2025-06-14T16:25:58.965Z' }
         }
       });
 

@@ -4,8 +4,8 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
 import { createWorkspace } from './session-manager';
-import { isMcpEnabled, getMcpConfig } from './mcp-manager';
 import { ClaudeOptions } from './types';
 import { FastifyReply } from 'fastify';
 import { executorLogger, createRequestLogger, logProcessEvent } from './logger';
@@ -26,6 +26,38 @@ function executeClaudeCommand(
 ): ChildProcess {
   const args = ['-p', '--verbose', '--output-format', 'stream-json'];
 
+  // Add MCP configuration if file exists
+  const mcpConfigPath = process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json');
+  try {
+    if (fs.existsSync(mcpConfigPath)) {
+      args.push('--mcp-config', mcpConfigPath);
+      executorLogger.info(
+        {
+          mcpConfigPath,
+          type: 'mcp_config',
+        },
+        'MCP configuration file found, adding to command'
+      );
+    } else {
+      executorLogger.debug(
+        {
+          mcpConfigPath,
+          type: 'mcp_config_not_found',
+        },
+        'MCP configuration file not found, skipping'
+      );
+    }
+  } catch (error) {
+    executorLogger.debug(
+      {
+        mcpConfigPath,
+        error: error instanceof Error ? error.message : String(error),
+        type: 'mcp_config_check_error',
+      },
+      'Error checking MCP configuration file'
+    );
+  }
+
   if (claudeSessionId) {
     args.push('--resume', claudeSessionId);
   }
@@ -41,22 +73,6 @@ function executeClaudeCommand(
   // Add allowed tools directly without validation
   if (options.allowedTools && options.allowedTools.length > 0) {
     args.push('--allowedTools', options.allowedTools.join(','));
-  }
-
-  // Check for MCP tools and add MCP configuration if needed
-  const mcpTools = options.allowedTools?.filter(tool => tool.startsWith('mcp__')) || [];
-  if (isMcpEnabled() && mcpTools.length > 0) {
-    const mcpConfigPath =
-      process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json');
-    args.push('--mcp-config', mcpConfigPath);
-    executorLogger.info(
-      {
-        mcpTools,
-        toolCount: mcpTools.length,
-        type: 'mcp_config',
-      },
-      'MCP enabled with requested tools'
-    );
   }
 
   if (options.disallowedTools && options.disallowedTools.length > 0) {
@@ -224,11 +240,6 @@ export async function executeClaudeAndStream(
     workspacePath = await createWorkspace();
   }
 
-  // Separate MCP tools from regular tools for logging
-  let mcpToolsForLogging: string[] = [];
-  if (options.allowedTools) {
-    mcpToolsForLogging = options.allowedTools.filter(tool => tool.startsWith('mcp__'));
-  }
 
   // Create request-scoped logger for this execution
   const requestLogger = createRequestLogger('claude-execution');
@@ -245,35 +256,12 @@ export async function executeClaudeAndStream(
         dangerouslySkipPermissions: options.dangerouslySkipPermissions || false,
         allowedToolsCount: options.allowedTools?.length || 0,
         disallowedToolsCount: options.disallowedTools?.length || 0,
-        mcpToolsCount: mcpToolsForLogging.length,
       },
       type: 'execution_start',
     },
     'Starting Claude execution'
   );
 
-  // Log MCP status with structured data
-  if (isMcpEnabled()) {
-    const mcpConfig = getMcpConfig();
-    const serverCount = Object.keys(mcpConfig?.mcpServers || {}).length;
-    requestLogger.info(
-      {
-        mcpEnabled: true,
-        serverCount,
-        requestedMcpTools: mcpToolsForLogging,
-        type: 'mcp_status',
-      },
-      `MCP enabled with ${serverCount} server(s) configured`
-    );
-  } else {
-    requestLogger.debug(
-      {
-        mcpEnabled: false,
-        type: 'mcp_status',
-      },
-      'MCP not enabled (no mcp-config.json found)'
-    );
-  }
 
   const timeoutMs = parseInt(process.env.CLAUDE_TOTAL_TIMEOUT_MS || '3600000', 10); // Default: 1 hour
   requestLogger.debug(

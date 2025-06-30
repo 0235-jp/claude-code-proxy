@@ -47,9 +47,6 @@ export interface OpenAIRequest {
   max_tokens?: number;
 }
 
-export interface McpConfig {
-  mcpServers: Record<string, unknown>;
-}
 
 export interface SessionInfo {
   session_id: string;
