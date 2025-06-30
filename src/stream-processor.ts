@@ -175,7 +175,7 @@ export class StreamProcessor {
         // Always show tool use content
         const fullText = this.showThinking
           ? `\n🔧 Using ${toolName}: ${toolInput}\n\n`
-          : `\n\`\`\`🔧 Tool use\nUsing ${toolName}: ${this.escapeNestedCodeBlocks(toolInput)}\n\`\`\`\n\n`;
+          : `\n\`\`\`🔧 Tool use (${toolName})\nUsing ${toolName}: ${this.escapeNestedCodeBlocks(toolInput)}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
