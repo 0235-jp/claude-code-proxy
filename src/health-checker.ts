@@ -5,7 +5,6 @@
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { getMcpConfig, isMcpEnabled } from './mcp-manager';
 import { healthLogger, logHealthCheck } from './logger';
 
 /**
@@ -29,7 +28,6 @@ export interface HealthStatus {
   checks: {
     claudeCli: HealthCheckResult;
     workspace: HealthCheckResult;
-    mcpConfig: HealthCheckResult;
   };
 }
 
@@ -186,65 +184,6 @@ export async function checkWorkspace(): Promise<HealthCheckResult> {
   }
 }
 
-/**
- * Check MCP configuration status
- */
-export async function checkMcpConfig(): Promise<HealthCheckResult> {
-  const timestamp = new Date().toISOString();
-
-  try {
-    if (!isMcpEnabled()) {
-      return {
-        status: 'healthy',
-        message: 'MCP is disabled (no configuration file found)',
-        details: {
-          enabled: false,
-          configPath: process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json'),
-        },
-        timestamp,
-      };
-    }
-
-    const mcpConfig = getMcpConfig();
-    const serverCount = mcpConfig ? Object.keys(mcpConfig.mcpServers || {}).length : 0;
-
-    if (serverCount === 0) {
-      return {
-        status: 'degraded',
-        message: 'MCP is enabled but no servers configured',
-        details: {
-          enabled: true,
-          serverCount: 0,
-          configPath: process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json'),
-        },
-        timestamp,
-      };
-    }
-
-    return {
-      status: 'healthy',
-      message: 'MCP configuration is valid and servers are configured',
-      details: {
-        enabled: true,
-        serverCount,
-        servers: Object.keys(mcpConfig?.mcpServers || {}),
-        configPath: process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json'),
-      },
-      timestamp,
-    };
-  } catch (error) {
-    return {
-      status: 'unhealthy',
-      message: 'MCP configuration is invalid or corrupted',
-      details: {
-        enabled: true,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        configPath: process.env.MCP_CONFIG_PATH || path.join(__dirname, '..', 'mcp-config.json'),
-      },
-      timestamp,
-    };
-  }
-}
 
 /**
  * Get process uptime in seconds
@@ -280,10 +219,9 @@ export async function performHealthCheck(): Promise<HealthStatus> {
   );
 
   // Run all checks in parallel
-  const [claudeCli, workspace, mcpConfig, version] = await Promise.all([
+  const [claudeCli, workspace, version] = await Promise.all([
     checkClaudeCli(),
     checkWorkspace(),
-    checkMcpConfig(),
     getVersion(),
   ]);
 
@@ -298,13 +236,9 @@ export async function performHealthCheck(): Promise<HealthStatus> {
     details: workspace.details,
   });
 
-  logHealthCheck('mcp-config', mcpConfig.status, {
-    message: mcpConfig.message,
-    details: mcpConfig.details,
-  });
 
   // Determine overall status
-  const checks = { claudeCli, workspace, mcpConfig };
+  const checks = { claudeCli, workspace };
   const statuses = Object.values(checks).map(check => check.status);
 
   let overallStatus: 'healthy' | 'unhealthy' | 'degraded';
@@ -323,7 +257,6 @@ export async function performHealthCheck(): Promise<HealthStatus> {
       checkResults: {
         claudeCli: claudeCli.status,
         workspace: workspace.status,
-        mcpConfig: mcpConfig.status,
       },
       uptime: getUptime(),
       version,

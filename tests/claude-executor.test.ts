@@ -11,19 +11,17 @@ import {
 } from '../src/claude-executor';
 import { spawn } from 'child_process';
 import { createWorkspace } from '../src/session-manager';
-import { isMcpEnabled, validateMcpTools, getMcpConfig } from '../src/mcp-manager';
 import { EventEmitter } from 'events';
+import * as fs from 'fs';
 
 // Mock dependencies
 jest.mock('child_process');
 jest.mock('../src/session-manager');
-jest.mock('../src/mcp-manager');
+jest.mock('fs');
 
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 const mockCreateWorkspace = createWorkspace as jest.MockedFunction<typeof createWorkspace>;
-const mockIsMcpEnabled = isMcpEnabled as jest.MockedFunction<typeof isMcpEnabled>;
-const mockValidateMcpTools = validateMcpTools as jest.MockedFunction<typeof validateMcpTools>;
-const mockGetMcpConfig = getMcpConfig as jest.MockedFunction<typeof getMcpConfig>;
+const mockFs = fs as jest.Mocked<typeof fs>;
 
 // Create mock ChildProcess
 class MockChildProcess extends EventEmitter {
@@ -63,9 +61,8 @@ describe('claude-executor', () => {
     mockProcess = new MockChildProcess();
     mockSpawn.mockReturnValue(mockProcess as any);
     mockCreateWorkspace.mockResolvedValue('/test/workspace');
-    mockIsMcpEnabled.mockReturnValue(false);
-    mockValidateMcpTools.mockReturnValue([]);
-    mockGetMcpConfig.mockReturnValue(null);
+    // Default: MCP config file exists
+    mockFs.existsSync.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -188,7 +185,7 @@ describe('claude-executor', () => {
       expect(mockCreateWorkspace).toHaveBeenCalledWith('test-project');
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
-        ['-p', '--verbose', '--output-format', 'stream-json'],
+        ['-p', '--verbose', '--output-format', 'stream-json', '--mcp-config', expect.stringContaining('mcp-config.json')],
         {
           cwd: '/test/workspace',
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -212,7 +209,7 @@ describe('claude-executor', () => {
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
-        ['-p', '--verbose', '--output-format', 'stream-json', '--resume', sessionId],
+        ['-p', '--verbose', '--output-format', 'stream-json', '--mcp-config', expect.stringContaining('mcp-config.json'), '--resume', sessionId],
         expect.any(Object)
       );
 
@@ -235,6 +232,8 @@ describe('claude-executor', () => {
           '--verbose',
           '--output-format',
           'stream-json',
+          '--mcp-config',
+          expect.stringContaining('mcp-config.json'),
           '--system-prompt',
           'You are a helpful assistant',
         ],
@@ -260,6 +259,8 @@ describe('claude-executor', () => {
           '--verbose',
           '--output-format',
           'stream-json',
+          '--mcp-config',
+          expect.stringContaining('mcp-config.json'),
           '--allowedTools',
           'tool1,tool2',
         ],
@@ -271,25 +272,44 @@ describe('claude-executor', () => {
       await executePromise;
     });
 
-    it('should add MCP configuration when enabled', async () => {
+    it('should always add MCP configuration', async () => {
       const reply = createMockReply();
-      const options = { allowedTools: ['mcp__github__listRepos'] };
-
-      mockIsMcpEnabled.mockReturnValue(true);
-      mockValidateMcpTools.mockReturnValue(['mcp__github__listRepos']);
+      const options = { allowedTools: ['Read', 'Write'] }; // No MCP tools
 
       const executePromise = executeClaudeAndStream('test prompt', null, options, reply as any);
       await Promise.resolve();
 
-      expect(mockValidateMcpTools).toHaveBeenCalledWith(['mcp__github__listRepos']);
       expect(mockSpawn).toHaveBeenCalledWith(
         'claude',
         expect.arrayContaining([
           '--mcp-config',
           expect.stringContaining('mcp-config.json'),
           '--allowedTools',
-          'mcp__github__listRepos',
+          'Read,Write',
         ]),
+        expect.any(Object)
+      );
+
+      mockProcess.emit('spawn');
+      mockProcess.emit('close', 0, null);
+      await executePromise;
+    });
+
+    it('should skip MCP config when file does not exist', async () => {
+      const reply = createMockReply();
+      mockFs.existsSync.mockReturnValue(false); // MCP config file doesn't exist
+
+      const executePromise = executeClaudeAndStream('test prompt', null, {}, reply as any);
+      await Promise.resolve();
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'claude',
+        [
+          '-p',
+          '--verbose',
+          '--output-format',
+          'stream-json',
+        ],
         expect.any(Object)
       );
 
@@ -575,85 +595,8 @@ describe('claude-executor', () => {
   });
 
   describe('error conditions and edge cases', () => {
-    it('should handle MCP tools when MCP is disabled', async () => {
-      const reply = createMockReply();
-      const options = { allowedTools: ['mcp__tool'] };
 
-      mockIsMcpEnabled.mockReturnValue(false);
 
-      const executePromise = executeClaudeAndStream('test prompt', null, options, reply as any);
-      await Promise.resolve();
 
-      expect(mockValidateMcpTools).not.toHaveBeenCalled();
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'claude',
-        expect.not.arrayContaining(['--mcp-config']),
-        expect.any(Object)
-      );
-
-      mockProcess.emit('spawn');
-      mockProcess.emit('close', 0, null);
-      await executePromise;
-    });
-
-    it('should handle MCP validation returning empty array', async () => {
-      const reply = createMockReply();
-      const options = { allowedTools: ['mcp__invalid__tool'] };
-
-      mockIsMcpEnabled.mockReturnValue(true);
-      mockValidateMcpTools.mockReturnValue([]); // No valid tools
-
-      const executePromise = executeClaudeAndStream('test prompt', null, options, reply as any);
-      await Promise.resolve();
-
-      expect(mockValidateMcpTools).toHaveBeenCalledWith(['mcp__invalid__tool']);
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'claude',
-        expect.not.arrayContaining(['--mcp-config']),
-        expect.any(Object)
-      );
-
-      mockProcess.emit('spawn');
-      mockProcess.emit('close', 0, null);
-      await executePromise;
-    });
-
-    it('should log MCP status when enabled', async () => {
-      const reply = createMockReply();
-      const options = { allowedTools: ['mcp__test__tool'] };
-
-      mockIsMcpEnabled.mockReturnValue(true);
-      mockValidateMcpTools.mockReturnValue(['mcp__test__tool']);
-      mockGetMcpConfig.mockReturnValue({
-        mcpServers: {
-          test: { command: 'node', args: ['test.js'] },
-          github: { command: 'node', args: ['github.js'] }
-        }
-      });
-
-      const executePromise = executeClaudeAndStream('test prompt', null, options, reply as any);
-      await Promise.resolve();
-
-      // MCP status is now logged via structured logging instead of console.log
-      // Just verify the execution continues to work correctly
-      mockProcess.emit('spawn');
-      mockProcess.emit('close', 0, null);
-      await executePromise;
-    });
-
-    it('should log when MCP is not enabled', async () => {
-      const reply = createMockReply();
-
-      mockIsMcpEnabled.mockReturnValue(false);
-
-      const executePromise = executeClaudeAndStream('test prompt', null, {}, reply as any);
-      await Promise.resolve();
-
-      // MCP status is now logged via structured logging instead of console.log
-      // Just verify the execution continues to work correctly
-      mockProcess.emit('spawn');
-      mockProcess.emit('close', 0, null);
-      await executePromise;
-    });
   });
 });

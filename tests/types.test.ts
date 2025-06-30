@@ -7,7 +7,6 @@ import {
   ClaudeApiRequest,
   OpenAIMessage,
   OpenAIRequest,
-  McpConfig,
   SessionInfo,
   StreamJsonData,
 } from '../src/types';
@@ -123,33 +122,6 @@ describe('types', () => {
     });
   });
 
-  describe('McpConfig', () => {
-    it('should allow valid McpConfig', () => {
-      const config: McpConfig = {
-        mcpServers: {
-          github: {
-            command: 'node',
-            args: ['github-server.js'],
-          },
-          filesystem: {
-            command: 'node',
-            args: ['fs-server.js'],
-          },
-        },
-      };
-
-      expect(config.mcpServers).toHaveProperty('github');
-      expect(config.mcpServers).toHaveProperty('filesystem');
-    });
-
-    it('should allow empty mcpServers', () => {
-      const config: McpConfig = {
-        mcpServers: {},
-      };
-
-      expect(config.mcpServers).toEqual({});
-    });
-  });
 
   describe('SessionInfo', () => {
     it('should allow valid SessionInfo', () => {
@@ -241,6 +213,7 @@ describe('types', () => {
           content: [
             {
               type: 'tool_use',
+              id: 'tool_use_123',
               name: 'search',
               input: { query: 'test' },
             },
@@ -250,8 +223,10 @@ describe('types', () => {
 
       const toolUse = data.message?.content?.[0];
       expect(toolUse?.type).toBe('tool_use');
-      expect(toolUse?.name).toBe('search');
-      expect(toolUse?.input).toEqual({ query: 'test' });
+      if (toolUse?.type === 'tool_use') {
+        expect(toolUse.name).toBe('search');
+        expect(toolUse.input).toEqual({ query: 'test' });
+      }
     });
 
     it('should allow tool_result content', () => {
@@ -261,6 +236,7 @@ describe('types', () => {
           content: [
             {
               type: 'tool_result',
+              tool_use_id: 'tool_use_123',
               content: 'Search results...',
               is_error: false,
             },
@@ -270,8 +246,10 @@ describe('types', () => {
 
       const toolResult = data.message?.content?.[0];
       expect(toolResult?.type).toBe('tool_result');
-      expect(toolResult?.content).toBe('Search results...');
-      expect(toolResult?.is_error).toBe(false);
+      if (toolResult?.type === 'tool_result') {
+        expect(toolResult.content).toBe('Search results...');
+        expect(toolResult.is_error).toBe(false);
+      }
     });
   });
 });

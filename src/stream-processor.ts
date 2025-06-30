@@ -3,11 +3,28 @@
  */
 
 import { FastifyReply } from 'fastify';
-import { StreamJsonData, SessionInfo } from './types';
+import { StreamJsonData, SessionInfo, ContentBlock, TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock } from './types';
 import { OpenAITransformer } from './openai-transformer';
 import { createLogger } from './logger';
 
 const logger = createLogger('stream-processor');
+
+// Type guards for content blocks
+function isTextBlock(block: ContentBlock): block is TextBlock {
+  return block.type === 'text';
+}
+
+function isThinkingBlock(block: ContentBlock): block is ThinkingBlock {
+  return block.type === 'thinking';
+}
+
+function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
+  return block.type === 'tool_use';
+}
+
+function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
+  return block.type === 'tool_result';
+}
 
 /**
  * Handles Claude CLI stream processing and conversion to OpenAI format
@@ -120,7 +137,7 @@ export class StreamProcessor {
     const isFinalResponse = stopReason === 'end_turn';
 
     for (const item of content) {
-      if (item.type === 'text') {
+      if (isTextBlock(item)) {
         // Close thinking when text content arrives
         if (this.inThinking) {
           if (this.showThinking) {
@@ -129,7 +146,7 @@ export class StreamProcessor {
           this.inThinking = false;
         }
 
-        const textContent = item.text || '';
+        const textContent = item.text;
         const fullText = `\n${textContent}`;
         const chunks = this.splitIntoChunks(fullText);
         for (let i = 0; i < chunks.length; i++) {
@@ -139,9 +156,9 @@ export class StreamProcessor {
             i === chunks.length - 1 && isFinalResponse ? 'stop' : null
           );
         }
-      } else if (item.type === 'thinking') {
+      } else if (isThinkingBlock(item)) {
         // Always process thinking content
-        const thinkingContent = item.thinking || '';
+        const thinkingContent = item.thinking;
 
         if (this.showThinking) {
           // Show thinking tags when enabled
@@ -159,9 +176,9 @@ export class StreamProcessor {
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
         }
-      } else if (item.type === 'tool_use') {
+      } else if (isToolUseBlock(item)) {
         // Always process tool use content
-        const toolName = item.name || 'Unknown';
+        const toolName = item.name;
         const toolInput = JSON.stringify(item.input || {});
 
         if (this.showThinking) {
@@ -175,7 +192,7 @@ export class StreamProcessor {
         // Always show tool use content
         const fullText = this.showThinking
           ? `\n🔧 Using ${toolName}: ${toolInput}\n\n`
-          : `\n\`\`\`🔧 Tool use\nUsing ${toolName}: ${this.escapeNestedCodeBlocks(toolInput)}\n\`\`\`\n\n`;
+          : `\n\`\`\`🔧 Tool use (${toolName})\nUsing ${toolName}: ${this.escapeNestedCodeBlocks(toolInput)}\n\`\`\`\n\n`;
         const chunks = this.splitIntoChunks(fullText);
         for (const chunk of chunks) {
           this.sendChunk(reply, chunk);
@@ -205,9 +222,9 @@ export class StreamProcessor {
     const content = message.content || [];
 
     for (const item of content) {
-      if (item.type === 'tool_result') {
+      if (isToolResultBlock(item)) {
         // Always process tool result content
-        const toolContent = item.content || '';
+        const toolContent = item.content;
         const isError = item.is_error || false;
         const prefix = isError ? '\n❌ Tool Error: ' : '\n✅ Tool Result: ';
 

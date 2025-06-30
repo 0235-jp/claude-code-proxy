@@ -10,7 +10,6 @@ import * as fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { loadEsm } from 'load-esm';
 import { executeClaudeAndStream } from './claude-executor';
-import { loadMcpConfig } from './mcp-manager';
 import { performHealthCheck } from './health-checker';
 import { createWorkspace } from './session-manager';
 import { ClaudeApiRequest, OpenAIRequest } from './types';
@@ -156,8 +155,6 @@ async function startServer(): Promise<void> {
   // Use centralized error handler
   server.setErrorHandler(errorHandler.handleError);
 
-  // Load MCP configuration on startup
-  await loadMcpConfig();
 
   // Initialize file-type module for optimal performance
   await initializeFileType();

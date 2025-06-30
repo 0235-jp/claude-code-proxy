@@ -5,7 +5,6 @@
 import supertest from 'supertest';
 import { server } from '../src/server';
 import { executeClaudeAndStream } from '../src/claude-executor';
-import { loadMcpConfig } from '../src/mcp-manager';
 import { performHealthCheck } from '../src/health-checker';
 import { authenticateRequest } from '../src/auth';
 import { OpenAITransformer } from '../src/openai-transformer';
@@ -13,7 +12,6 @@ import { StreamProcessor } from '../src/stream-processor';
 
 // Mock dependencies
 jest.mock('../src/claude-executor');
-jest.mock('../src/mcp-manager');
 jest.mock('../src/health-checker');
 jest.mock('../src/auth');
 jest.mock('../src/openai-transformer');

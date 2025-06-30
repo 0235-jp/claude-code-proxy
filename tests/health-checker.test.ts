@@ -8,12 +8,10 @@ import { promises as fs } from 'fs';
 import {
   checkClaudeCli,
   checkWorkspace,
-  checkMcpConfig,
   performHealthCheck,
   getUptime,
   getVersion
 } from '../src/health-checker';
-import * as mcpManager from '../src/mcp-manager';
 
 // Mock dependencies
 jest.mock('child_process');
@@ -25,11 +23,9 @@ jest.mock('fs', () => ({
     readFile: jest.fn()
   }
 }));
-jest.mock('../src/mcp-manager');
 
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 const mockFs = fs as jest.Mocked<typeof fs>;
-const mockMcpManager = mcpManager as jest.Mocked<typeof mcpManager>;
 
 describe('Health Checker', () => {
   beforeEach(() => {
@@ -251,84 +247,6 @@ describe('Health Checker', () => {
     });
   });
 
-  describe('checkMcpConfig', () => {
-    it('should return healthy when MCP is disabled', async () => {
-      mockMcpManager.isMcpEnabled.mockReturnValue(false);
-
-      const result = await checkMcpConfig();
-
-      expect(result.status).toBe('healthy');
-      expect(result.message).toBe('MCP is disabled (no configuration file found)');
-      expect(result.details).toMatchObject({
-        enabled: false
-      });
-    });
-
-    it('should return degraded when MCP is enabled but no servers configured', async () => {
-      mockMcpManager.isMcpEnabled.mockReturnValue(true);
-      mockMcpManager.getMcpConfig.mockReturnValue({
-        mcpServers: {}
-      });
-
-      const result = await checkMcpConfig();
-
-      expect(result.status).toBe('degraded');
-      expect(result.message).toBe('MCP is enabled but no servers configured');
-      expect(result.details).toMatchObject({
-        enabled: true,
-        serverCount: 0
-      });
-    });
-
-    it('should return healthy when MCP is enabled with servers configured', async () => {
-      mockMcpManager.isMcpEnabled.mockReturnValue(true);
-      mockMcpManager.getMcpConfig.mockReturnValue({
-        mcpServers: {
-          'github': { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] },
-          'deepwiki': { command: 'uv', args: ['--directory', 'servers/src/deepwiki', 'run', 'deepwiki'] }
-        }
-      });
-
-      const result = await checkMcpConfig();
-
-      expect(result.status).toBe('healthy');
-      expect(result.message).toBe('MCP configuration is valid and servers are configured');
-      expect(result.details).toMatchObject({
-        enabled: true,
-        serverCount: 2,
-        servers: ['github', 'deepwiki']
-      });
-    });
-
-    it('should return unhealthy when MCP configuration is invalid', async () => {
-      mockMcpManager.isMcpEnabled.mockReturnValue(true);
-      mockMcpManager.getMcpConfig.mockImplementation(() => {
-        throw new Error('Invalid JSON');
-      });
-
-      const result = await checkMcpConfig();
-
-      expect(result.status).toBe('unhealthy');
-      expect(result.message).toBe('MCP configuration is invalid or corrupted');
-      expect(result.details).toMatchObject({
-        enabled: true,
-        error: 'Invalid JSON'
-      });
-    });
-
-    it('should use MCP_CONFIG_PATH environment variable', async () => {
-      const originalEnv = process.env;
-      process.env = { ...originalEnv, MCP_CONFIG_PATH: '/custom/mcp-config.json' };
-
-      mockMcpManager.isMcpEnabled.mockReturnValue(false);
-
-      const result = await checkMcpConfig();
-
-      expect(result.details?.configPath).toBe('/custom/mcp-config.json');
-
-      process.env = originalEnv;
-    });
-  });
 
   describe('getUptime', () => {
     it('should return process uptime', () => {
@@ -395,8 +313,6 @@ describe('Health Checker', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.rmdir.mockResolvedValue(undefined);
 
-      // Mock MCP as disabled
-      mockMcpManager.isMcpEnabled.mockReturnValue(false);
 
       // Mock package.json reading
       mockFs.readFile.mockResolvedValue('{"version": "1.0.0"}');
@@ -407,7 +323,6 @@ describe('Health Checker', () => {
       expect(result.version).toBe('1.0.0');
       expect(result.checks).toHaveProperty('claudeCli');
       expect(result.checks).toHaveProperty('workspace');
-      expect(result.checks).toHaveProperty('mcpConfig');
     });
 
     it('should return degraded status when workspace is degraded', async () => {
@@ -430,8 +345,6 @@ describe('Health Checker', () => {
       mockFs.stat.mockResolvedValue(mockStats as any);
       mockFs.mkdir.mockRejectedValue(new Error('Permission denied'));
 
-      // Mock MCP as disabled
-      mockMcpManager.isMcpEnabled.mockReturnValue(false);
 
       // Mock package.json reading
       mockFs.readFile.mockResolvedValue('{"version": "1.0.0"}');
@@ -460,8 +373,6 @@ describe('Health Checker', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.rmdir.mockResolvedValue(undefined);
 
-      // Mock MCP as disabled
-      mockMcpManager.isMcpEnabled.mockReturnValue(false);
 
       // Mock package.json reading
       mockFs.readFile.mockResolvedValue('{"version": "1.0.0"}');
